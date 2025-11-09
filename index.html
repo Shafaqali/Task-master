@@ -6,20 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TaskMaster - Mobile App</title>
     <link rel="stylesheet" href="new.css">
-
-
-
-
-
-    <script defer src="https://www.gstatic.com/firebasejs/10.12.1/firebase-app.js"></script>
-<script defer src="https://www.gstatic.com/firebasejs/10.12.1/firebase-auth.js"></script>
-<script defer src="https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js"></script>
-<script defer>
-    const app = firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-</script>
-
 </head>
 
 <body>
@@ -400,18 +386,42 @@
         <div class="search-results" id="searchResults"></div>
     </div>
 
+<!-- ✅ Firebase Modular SDK -->
+<!-- ✅ Firebase Modular SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-app.js";
+  import { getFirestore, setDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js";
+  import "https://cdn.emailjs.com/dist/email.min.js";
 
+  // ✅ Your Firebase Config
+  const firebaseConfig = {
+    apiKey: "AIzaSyCvjEmE28vCa4fjirnGwVKwZQgtDijxbwU",
+    authDomain: "task-master-2004.firebaseapp.com",
+    projectId: "task-master-2004",
+    storageBucket: "task-master-2004.firebasestorage.app",
+    messagingSenderId: "959840202961",
+    appId: "1:959840202961:web:eb73413f4b75175e51d5f0",
+    measurementId: "G-C0DJS166K8"
+  };
 
-    <!-- ✅ EmailJS SDK -->
-    <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
-    <script>
-        (function () {
-            emailjs.init("7aVCMvL70Vi2PxesE"); // your public key
-        })();
-    </script>
+  // ✅ Initialize Firebase & Firestore
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-    <!-- ✅ Your JS file -->
-    <script src="script.js"></script>
+  // ✅ Make Firestore available globally
+  window.db = db;
+  window.setDoc = setDoc;
+  window.doc = doc;
+
+  // ✅ Initialize EmailJS
+  (function() {
+    emailjs.init("7aVCMvL70Vi2PxesE"); // your public key
+  })();
+</script>
+
+<!-- ✅ Your main JS file -->
+<script src="script.js"></script>
+
 
 
 

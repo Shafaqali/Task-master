@@ -1,4 +1,13 @@
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// ✅ Initialize EmailJS (must be on top)
+(function () {
+    emailjs.init("7aVCMvL70Vi2PxesE"); // your public key
+})();
+
+
+
+
+
 const firebaseConfig = {
     apiKey: "AIzaSyCvjEmE28vCa4fjirnGwVKwZQgtDijxbwU",
     authDomain: "task-master-2004.firebaseapp.com",
@@ -239,32 +248,24 @@ async function handleSignup() {
         localStorage.setItem('taskmaster_users', JSON.stringify(users));
 
         // Generate OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        localStorage.setItem(`otp_${email}`, otp);
+        // Generate OTP
+        const generatedOtp = Math.floor(100000 + Math.random() * 900000);
 
-        // Show loading spinner (optional)
-        showLoading();
-
-        // Send OTP email using EmailJS
+        // Send OTP through EmailJS
         emailjs.send("service_tv8qwfs", "template_jykocjc", {
+            user_name: name,  // from your input
             email: email,
-            user_name: name,  // for signup; use something like "User" for forgot password
-            otp: otp
+            otp: generatedOtp
         })
-            .then(() => {
-                hideLoading();
-                showAlert("signupAlert", "OTP sent successfully to your email!", "success");
 
-                // Proceed to OTP verification screen
-                document.getElementById("signupScreen").classList.add("hidden");
-                document.getElementById("otpScreen").classList.remove("hidden");
-                document.getElementById("otpEmail").textContent = email;
+            .then(function () {
+                console.log("✅ OTP sent to " + signupEmail);
+                alert("OTP sent to your email!");
             })
-            .catch((error) => {
-                hideLoading();
-                console.error("EmailJS error:", error);
-                showAlert("signupAlert", "Failed to send OTP. Please try again.", "error");
+            .catch(function (error) {
+                console.error("❌ EmailJS error:", error);
             });
+
 
 
         state.otpEmail = email;
@@ -304,16 +305,20 @@ async function handleVerifyOTP() {
 
                 showAlert('otpAlert', 'Email verified successfully!', 'success');
                 // 🟢 Save user in Firebase Firestore
-                db.collection("users").doc(state.otpEmail).set({
+                import { doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js";
+
+                // Save user to Firestore (modern way)
+                await setDoc(doc(window.db, "users", state.otpEmail), {
                     name: state.currentUser?.name || "New User",
                     email: state.otpEmail,
                     password: state.currentUser?.password || "******",
                     verified: true,
                     createdAt: new Date().toISOString()
-                })
+                });
+
                     .then(() => {
-                        console.log("User saved to Firestore ✅");
-                    })
+                    console.log("User saved to Firestore ✅");
+                })
                     .catch((error) => {
                         console.error("Error saving user:", error);
                     });
