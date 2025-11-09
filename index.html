@@ -388,12 +388,12 @@
 
 <!-- ✅ Firebase Modular SDK -->
 <!-- ✅ Firebase Modular SDK -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-app.js";
-  import { getFirestore, setDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js";
-  import "https://cdn.emailjs.com/dist/email.min.js";
+<!-- Firebase v8 Compatible (for GitHub Pages) -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+<script src="https://cdn.emailjs.com/dist/email.min.js"></script>
 
-  // ✅ Your Firebase Config
+<script>
   const firebaseConfig = {
     apiKey: "AIzaSyCvjEmE28vCa4fjirnGwVKwZQgtDijxbwU",
     authDomain: "task-master-2004.firebaseapp.com",
@@ -404,27 +404,17 @@
     measurementId: "G-C0DJS166K8"
   };
 
-  // ✅ Initialize Firebase & Firestore
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
 
-  // ✅ Make Firestore available globally
+  // Make it global
   window.db = db;
-  window.setDoc = setDoc;
-  window.doc = doc;
 
-  // ✅ Initialize EmailJS
+  // EmailJS init
   (function() {
-    emailjs.init("7aVCMvL70Vi2PxesE"); // your public key
+    emailjs.init("7aVCMvL70Vi2PxesE");
   })();
 </script>
-
-<!-- ✅ Your main JS file -->
 <script src="script.js"></script>
-
-
-
-
 </body>
-
 </html>

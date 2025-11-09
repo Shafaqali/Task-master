@@ -304,24 +304,20 @@ async function handleVerifyOTP() {
                 localStorage.removeItem(`otp_${state.otpEmail}`);
 
                 showAlert('otpAlert', 'Email verified successfully!', 'success');
-                // 🟢 Save user in Firebase Firestore
-                import { doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js";
-
-                // Save user to Firestore (modern way)
-                await setDoc(doc(window.db, "users", state.otpEmail), {
-                    name: state.currentUser?.name || "New User",
-                    email: state.otpEmail,
-                    password: state.currentUser?.password || "******",
-                    verified: true,
-                    createdAt: new Date().toISOString()
-                });
-
-                    .then(() => {
-                    console.log("User saved to Firestore ✅");
-                })
-                    .catch((error) => {
-                        console.error("Error saving user:", error);
+                // 🟢 Save user in Firebase Firestore (dynamic import + await)
+                try {
+                    const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js");
+                    await setDoc(doc(window.db, "users", state.otpEmail), {
+                        name: state.currentUser?.name || "New User",
+                        email: state.otpEmail,
+                        password: state.currentUser?.password || "******",
+                        verified: true,
+                        createdAt: new Date().toISOString()
                     });
+                    console.log("User saved to Firestore ✅");
+                } catch (error) {
+                    console.error("Error saving user:", error);
+                }
 
                 setTimeout(() => {
                     showScreen('loginScreen');
