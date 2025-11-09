@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskMaster - Mobile App</title>
+    <link rel="stylesheet" href="new.css">
+
+
+
+
+
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.1/firebase-app.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.1/firebase-auth.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js"></script>
+<script defer>
+    const app = firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+</script>
+
+</head>
+
+<body>
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Login Screen -->
+    <div class="auth-screen" id="loginScreen">
+        <div class="auth-logo">
+            <div class="logo-icon">✨</div>
+            <div class="logo-text">TaskMaster</div>
+            <div class="logo-tagline">Organize your life, one task at a time</div>
+        </div>
+        <div class="auth-form">
+            <h2 class="form-title">Welcome Back!</h2>
+            <div id="loginAlert"></div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="loginEmail" placeholder="Enter your email">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-input" id="loginPassword" placeholder="Enter your password">
+            </div>
+            <div class="forgot-password">
+                <a href="#" id="showForgotPassword">Forgot Password?</a>
+            </div>
+            <button class="btn btn-primary" id="loginBtn"><span>🔐</span><span>Sign In</span></button>
+            <div class="auth-link">Don't have an account? <a href="#" id="showSignup">Sign Up</a></div>
+        </div>
+    </div>
+
+    <!-- Signup Screen -->
+    <div class="auth-screen hidden" id="signupScreen">
+        <div class="auth-logo">
+            <div class="logo-icon">✨</div>
+            <div class="logo-text">TaskMaster</div>
+            <div class="logo-tagline">Start your productivity journey</div>
+        </div>
+        <div class="auth-form">
+            <h2 class="form-title">Create Account</h2>
+            <div id="signupAlert"></div>
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-input" id="signupName" placeholder="Enter your name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="signupEmail" placeholder="Enter your email">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-input" id="signupPassword" placeholder="Create a password">
+            </div>
+            <button class="btn btn-primary" id="signupBtn"><span>🚀</span><span>Create Account</span></button>
+            <div class="auth-link">Already have an account? <a href="#" id="showLogin">Sign In</a></div>
+        </div>
+    </div>
+
+    <!-- OTP Verification Screen -->
+    <div class="auth-screen hidden" id="otpScreen">
+        <div class="auth-logo">
+            <div class="logo-icon">📧</div>
+            <div class="logo-text">Verify Email</div>
+            <div class="logo-tagline">Enter the OTP sent to your email</div>
+        </div>
+        <div class="auth-form">
+            <h2 class="form-title">Enter OTP</h2>
+            <div id="otpAlert"></div>
+            <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
+                We sent a 6-digit code to<br>
+                <strong id="otpEmail">your@email.com</strong>
+            </p>
+            <div class="otp-container">
+                <input type="text" class="otp-input" maxlength="1" id="otp1">
+                <input type="text" class="otp-input" maxlength="1" id="otp2">
+                <input type="text" class="otp-input" maxlength="1" id="otp3">
+                <input type="text" class="otp-input" maxlength="1" id="otp4">
+                <input type="text" class="otp-input" maxlength="1" id="otp5">
+                <input type="text" class="otp-input" maxlength="1" id="otp6">
+            </div>
+            <button class="btn btn-primary" id="verifyOtpBtn"><span>✅</span><span>Verify OTP</span></button>
+            <div class="resend-otp">
+                Didn't receive code? <button id="resendOtpBtn">Resend OTP</button>
+                <span id="otpTimer"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forgot Password Screen -->
+    <div class="auth-screen hidden" id="forgotPasswordScreen">
+        <div class="auth-logo">
+            <div class="logo-icon">🔑</div>
+            <div class="logo-text">Reset Password</div>
+            <div class="logo-tagline">We'll send you an OTP to reset</div>
+        </div>
+        <div class="auth-form">
+            <h2 class="form-title">Forgot Password?</h2>
+            <div id="forgotAlert"></div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="forgotEmail" placeholder="Enter your email">
+            </div>
+            <button class="btn btn-primary" id="sendResetOtpBtn"><span>📧</span><span>Send OTP</span></button>
+            <div class="auth-link">Remember password? <a href="#" id="backToLogin">Sign In</a></div>
+        </div>
+    </div>
+
+    <!-- Reset Password Screen -->
+    <div class="auth-screen hidden" id="resetPasswordScreen">
+        <div class="auth-logo">
+            <div class="logo-icon">🔐</div>
+            <div class="logo-text">New Password</div>
+            <div class="logo-tagline">Create a strong password</div>
+        </div>
+        <div class="auth-form">
+            <h2 class="form-title">Reset Password</h2>
+            <div id="resetAlert"></div>
+            <div class="form-group">
+                <label class="form-label">Enter OTP</label>
+                <input type="text" class="form-input" id="resetOtp" placeholder="Enter 6-digit OTP" maxlength="6">
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input type="password" class="form-input" id="newPassword" placeholder="Enter new password">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm Password</label>
+                <input type="password" class="form-input" id="confirmPassword" placeholder="Confirm new password">
+            </div>
+            <button class="btn btn-primary" id="resetPasswordBtn"><span>🔐</span><span>Reset Password</span></button>
+        </div>
+    </div>
+
+    <!-- App Container -->
+    <div class="app-container" id="appContainer">
+        <!-- Header -->
+        <div class="mobile-header">
+            <div class="header-left">
+                <button class="menu-btn" id="menuBtn">☰</button>
+                <div class="header-title">Tasks</div>
+            </div>
+            <div class="header-right">
+                <button class="icon-btn" id="searchBtn">🔍</button>
+                <button class="icon-btn" id="notifBtn">🔔<span class="notification-badge"
+                        id="notifBadge">0</span></button>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar" onclick="openEditProfile()">U</div>
+                    <div class="user-details">
+                        <h3 id="userName">User</h3>
+                        <p id="userEmail">user@email.com</p>
+                    </div>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-item active" data-page="homePage"><span>📝</span><span>My Tasks</span></div>
+                <div class="nav-item" data-page="categoriesPage"><span>📁</span><span>Categories</span></div>
+                <div class="nav-item" data-page="calendarPage"><span>📅</span><span>Calendar</span></div>
+                <div class="nav-item" data-page="statsPage"><span>📊</span><span>Statistics</span></div>
+                <div class="nav-item" data-page="settingsPage"><span>⚙️</span><span>Settings</span></div>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="btn btn-primary" id="logoutBtn"><span>🚪</span><span>Logout</span></button>
+            </div>
+        </div>
+
+        <!-- Notification Panel -->
+        <div class="notification-panel" id="notificationPanel">
+            <div class="notification-header">
+                <h3>🔔 Notifications</h3>
+                <button class="close-btn" id="closeNotifPanel"
+                    style="background: white; color: var(--primary);">✕</button>
+            </div>
+            <div class="notification-list" id="notificationList">
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <p>No notifications</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Home Page (same as before) -->
+        <div class="page active" id="homePage">
+            <div class="stats-section">
+                <div class="stat-card">
+                    <div class="stat-number" style="color: var(--primary);" id="totalTasks">0</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: var(--secondary);" id="completedTasks">0</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: var(--warning);" id="pendingTasks">0</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: var(--danger);" id="overdueTasks">0</div>
+                    <div class="stat-label">Overdue</div>
+                </div>
+            </div>
+            <div class="quick-add">
+                <button class="add-task-btn" id="addTaskBtn"><span>➕</span><span>Add New Task</span></button>
+            </div>
+            <div class="tasks-section">
+                <div class="filter-chips">
+                    <div class="chip active" data-filter="all">📋 All</div>
+                    <div class="chip" data-filter="pending">⏳ Pending</div>
+                    <div class="chip" data-filter="completed">✅ Completed</div>
+                    <div class="chip" data-filter="high">🔴 High</div>
+                    <div class="chip" data-filter="today">📅 Today</div>
+                </div>
+                <div class="section-header">
+                    <div class="section-title">Tasks</div>
+                    <select class="chip" id="sortSelect" style="border: none; padding: 0.5rem;">
+                        <option value="date">Date</option>
+                        <option value="priority">Priority</option>
+                        <option value="category">Category</option>
+                    </select>
+                </div>
+                <div id="tasksList">
+                    <div class="empty-state">
+                        <div class="empty-icon">📝</div>
+                        <h3>No tasks yet</h3>
+                        <p>Tap the button above to add your first task</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Other pages remain same... (Stats, Calendar, Categories, Settings) -->
+        <!-- Stats Page -->
+        <div class="page" id="statsPage">
+            <!-- Content will be dynamically generated -->
+        </div>
+
+        <!-- Calendar Page -->
+        <div class="page" id="calendarPage">
+            <!-- Content will be dynamically generated -->
+        </div>
+
+        <!-- Categories Page -->
+        <div class="page" id="categoriesPage">
+            <!-- Content will be dynamically generated -->
+        </div>
+
+        <!-- Settings Page -->
+        <div class="page" id="settingsPage">
+            <!-- Content will be dynamically generated -->
+        </div>
+        <!-- I'll provide them in next response -->
+
+        <!-- Profile Page with Edit -->
+        <div class="page" id="profilePage">
+            <div class="profile-page">
+                <div class="profile-header">
+                    <div class="profile-avatar-large" id="profileAvatar" onclick="openEditProfile()">U</div>
+                    <h2 id="profileName">User Name</h2>
+                    <p style="color: rgba(255,255,255,0.9);" id="profileEmail">user@email.com</p>
+                    <button class="edit-profile-btn" onclick="openEditProfile()">✏️ Edit Profile</button>
+                </div>
+                <div class="profile-section">
+                    <h3 style="margin-bottom: 1rem;">📊 Your Activity</h3>
+                    <div class="profile-item"><span>Total Tasks Created</span><strong id="profileTotalTasks">0</strong>
+                    </div>
+                    <div class="profile-item"><span>Tasks Completed</span><strong id="profileCompletedTasks">0</strong>
+                    </div>
+                    <div class="profile-item"><span>Completion Rate</span><strong id="profileCompletionRate">0%</strong>
+                    </div>
+                    <div class="profile-item"><span>Member Since</span><strong id="profileMemberSince">Today</strong>
+                    </div>
+                </div>
+                <div class="profile-section">
+                    <h3 style="margin-bottom: 1rem;">🎯 Achievements</h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                        <div
+                            style="text-align: center; padding: 1rem; background: var(--bg-card); border-radius: 0.75rem;">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌟</div>
+                            <div style="font-size: 0.875rem;">First Task</div>
+                        </div>
+                        <div
+                            style="text-align: center; padding: 1rem; background: var(--bg-card); border-radius: 0.75rem;">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔥</div>
+                            <div style="font-size: 0.875rem;">10 Tasks</div>
+                        </div>
+                        <div
+                            style="text-align: center; padding: 1rem; background: var(--bg-card); border-radius: 0.75rem;">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">💪</div>
+                            <div style="font-size: 0.875rem;">Productive</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <div class="bottom-nav">
+            <button class="nav-btn active" data-page="homePage"><span class="nav-btn-icon">🏠</span><span
+                    class="nav-btn-label">Home</span></button>
+            <button class="nav-btn" data-page="statsPage"><span class="nav-btn-icon">📊</span><span
+                    class="nav-btn-label">Stats</span></button>
+            <button class="nav-btn" data-page="calendarPage"><span class="nav-btn-icon">📅</span><span
+                    class="nav-btn-label">Calendar</span></button>
+            <button class="nav-btn" data-page="profilePage"><span class="nav-btn-icon">👤</span><span
+                    class="nav-btn-label">Profile</span></button>
+        </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div class="modal" id="editProfileModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Edit Profile</h2>
+                <button class="close-btn" id="closeEditProfile">✕</button>
+            </div>
+            <div id="editProfileAlert"></div>
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-input" id="editName" placeholder="Enter your name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="editEmail" placeholder="Enter your email" disabled>
+            </div>
+            <button class="btn btn-primary" id="saveProfileBtn"><span>💾</span><span>Save Changes</span></button>
+        </div>
+    </div>
+
+    <!-- Task Modal (same as before) -->
+    <div class="modal" id="taskModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Add Task</h2>
+                <button class="close-btn" id="closeModal">✕</button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Task Title</label>
+                <input type="text" class="form-input" id="taskTitle" placeholder="What needs to be done?">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <select class="form-input" id="taskCategory">
+                    <option value="Personal">📱 Personal</option>
+                    <option value="Work">💼 Work</option>
+                    <option value="Shopping">🛒 Shopping</option>
+                    <option value="Study">📚 Study</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Priority</label>
+                <select class="form-input" id="taskPriority">
+                    <option value="low">🟢 Low</option>
+                    <option value="medium">🟡 Medium</option>
+                    <option value="high">🔴 High</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Due Date</label>
+                <input type="datetime-local" class="form-input" id="taskDueDate">
+            </div>
+            <button class="btn btn-primary" id="saveTaskBtn"><span>💾</span><span>Save Task</span></button>
+        </div>
+    </div>
+
+    <!-- Search Modal -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-container">
+            <input type="text" class="search-input" id="searchInput" placeholder="🔍 Search tasks..." autofocus>
+        </div>
+        <div class="search-results" id="searchResults"></div>
+    </div>
+
+
+
+    <!-- ✅ EmailJS SDK -->
+    <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+    <script>
+        (function () {
+            emailjs.init("7aVCMvL70Vi2PxesE"); // your public key
+        })();
+    </script>
+
+    <!-- ✅ Your JS file -->
+    <script src="script.js"></script>
+
+
+
+</body>
+
+</html>
