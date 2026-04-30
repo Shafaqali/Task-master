@@ -1,1515 +1,665 @@
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-// ✅ Initialize EmailJS (must be on top)
-(function () {
-    emailjs.init("7aVCMvL70Vi2PxesE"); // your public key
-})();
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,sendPasswordResetEmail,onAuthStateChanged,updateProfile as fbUpdateProfile,GoogleAuthProvider,signInWithPopup}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import{getFirestore,doc,setDoc,getDoc,addDoc,updateDoc,deleteDoc,collection,query,where,getDocs,onSnapshot,serverTimestamp,orderBy}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+const firebaseConfig={apiKey:"AIzaSyCvjEmE28vCa4fjirnGwVKwZQgtDijxbwU",authDomain:"task-master-2004.firebaseapp.com",projectId:"task-master-2004",storageBucket:"task-master-2004.firebasestorage.app",messagingSenderId:"959840202961",appId:"1:959840202961:web:eb73413f4b75175e51d5f0"};
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getFirestore(app);
+const gp=new GoogleAuthProvider();
 
+const S={user:null,tasks:[],categories:['Personal','Work','Shopping','Study'],filter:'all',sort:'date',editingId:null,calMonth:new Date().getMonth(),calYear:new Date().getFullYear(),unsubTasks:null};
 
-
-
-const firebaseConfig = {
-    apiKey: "AIzaSyCvjEmE28vCa4fjirnGwVKwZQgtDijxbwU",
-    authDomain: "task-master-2004.firebaseapp.com",
-    projectId: "task-master-2004",
-    storageBucket: "task-master-2004.firebasestorage.app",
-    messagingSenderId: "959840202961",
-    appId: "1:959840202961:web:eb73413f4b75175e51d5f0",
-    measurementId: "G-C0DJS166K8"
-};
-
-
-
-
-
-
-
-
-
-// TaskMaster - Complete JavaScript Implementation
-
-// State Management
-const state = {
-    currentUser: null,
-    tasks: [],
-    categories: ['Personal', 'Work', 'Shopping', 'Study'],
-    currentFilter: 'all',
-    currentSort: 'date',
-    editingTaskId: null,
-    otpEmail: '',
-    otpTimer: null,
-    otpTimeLeft: 60,
-    calendarMonth: new Date().getMonth(),
-    calendarYear: new Date().getFullYear()
-};
-
-// Initialize App
-document.addEventListener('DOMContentLoaded', () => {
-    initializeApp();
+document.addEventListener('DOMContentLoaded',()=>{
+  setupTheme();
+  setupEvents();
+  onAuthStateChanged(auth,async(fu)=>{
+    if(fu){
+      S.user=await loadProfile(fu);
+      subscribeToTasks(fu.uid);
+      showApp();
+    }else{
+      if(S.unsubTasks){S.unsubTasks();S.unsubTasks=null;}
+      S.user=null;S.tasks=[];
+      document.getElementById('appContainer').classList.remove('active');
+      showScreen('loginScreen');
+    }
+  });
 });
 
-function initializeApp() {
-    checkAuthState();
-    setupEventListeners();
-    setupOTPInputs();
+const $=id=>document.getElementById(id);
+function showLoading(){$('loading').classList.add('active')}
+function hideLoading(){$('loading').classList.remove('active')}
+function showScreen(id){document.querySelectorAll('.auth-wrap').forEach(s=>s.classList.add('hidden'));$(id)?.classList.remove('hidden')}
+
+function showAlert(cid,msg,type='error'){
+  const el=$(cid);if(!el)return;
+  const d=document.createElement('div');
+  d.className=`alert alert-${type}`;d.innerHTML=msg;
+  el.innerHTML='';el.appendChild(d);
+  setTimeout(()=>d.remove(),6000);
 }
 
-// Auth State Check
-function checkAuthState() {
-    const savedUser = localStorage.getItem('taskmaster_user');
-    if (savedUser) {
-        state.currentUser = JSON.parse(savedUser);
-        showApp();
-    } else {
-        showScreen('loginScreen');
-    }
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+function fmtDate(ds){
+  const d=new Date(ds),now=new Date();
+  const dO=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  const nO=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const diff=Math.round((dO-nO)/86400000);
+  if(diff<0)return'Overdue';
+  if(diff===0)return'Today';
+  if(diff===1)return'Tomorrow';
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
-// Event Listeners Setup
-function setupEventListeners() {
-    // Auth Events
-    document.getElementById('loginBtn').addEventListener('click', handleLogin);
-    document.getElementById('signupBtn').addEventListener('click', handleSignup);
-    document.getElementById('verifyOtpBtn').addEventListener('click', handleVerifyOTP);
-    document.getElementById('sendResetOtpBtn').addEventListener('click', handleForgotPassword);
-    document.getElementById('resetPasswordBtn').addEventListener('click', handleResetPassword);
-    document.getElementById('resendOtpBtn').addEventListener('click', resendOTP);
-    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
-
-    // Screen Navigation
-    document.getElementById('showSignup').addEventListener('click', (e) => {
-        e.preventDefault();
-        showScreen('signupScreen');
-    });
-    document.getElementById('showLogin').addEventListener('click', (e) => {
-        e.preventDefault();
-        showScreen('loginScreen');
-    });
-    document.getElementById('showForgotPassword').addEventListener('click', (e) => {
-        e.preventDefault();
-        showScreen('forgotPasswordScreen');
-    });
-    document.getElementById('backToLogin').addEventListener('click', (e) => {
-        e.preventDefault();
-        showScreen('loginScreen');
-    });
-
-    // Menu & Sidebar
-    document.getElementById('menuBtn').addEventListener('click', toggleSidebar);
-    document.getElementById('sidebarOverlay').addEventListener('click', toggleSidebar);
-
-    // Navigation
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', () => handleNavigation(item.dataset.page));
-    });
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.addEventListener('click', () => handleNavigation(btn.dataset.page));
-    });
-
-    // Tasks
-    document.getElementById('addTaskBtn').addEventListener('click', () => openTaskModal());
-    document.getElementById('saveTaskBtn').addEventListener('click', saveTask);
-    document.getElementById('closeModal').addEventListener('click', closeTaskModal);
-
-    // Notifications
-    document.getElementById('notifBtn').addEventListener('click', toggleNotifications);
-    document.getElementById('closeNotifPanel').addEventListener('click', toggleNotifications);
-
-    // Search
-    document.getElementById('searchBtn').addEventListener('click', openSearch);
-    document.getElementById('searchInput').addEventListener('input', handleSearch);
-    document.addEventListener('click', (e) => {
-        if (e.target.id === 'searchModal') closeSearch();
-    });
-
-    // Filter & Sort
-    document.querySelectorAll('.chip[data-filter]').forEach(chip => {
-        chip.addEventListener('click', () => handleFilter(chip.dataset.filter));
-    });
-    document.getElementById('sortSelect').addEventListener('change', (e) => {
-        state.currentSort = e.target.value;
-        renderTasks();
-    });
-
-    // Profile Edit
-    document.getElementById('closeEditProfile').addEventListener('click', closeEditProfile);
-    document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
-
-    // Modal Close on Outside Click
-    document.getElementById('taskModal').addEventListener('click', (e) => {
-        if (e.target.id === 'taskModal') closeTaskModal();
-    });
-    document.getElementById('editProfileModal').addEventListener('click', (e) => {
-        if (e.target.id === 'editProfileModal') closeEditProfile();
-    });
+function friendlyErr(code){
+  return({'auth/user-not-found':'No account with this email.','auth/wrong-password':'Wrong password.','auth/invalid-credential':'Invalid email or password.','auth/email-already-in-use':'Email already registered.','auth/weak-password':'Password min 6 characters.','auth/invalid-email':'Invalid email address.','auth/too-many-requests':'Too many attempts. Try later.','auth/popup-closed-by-user':'Google sign-in cancelled.','auth/network-request-failed':'Network error.'})[code]||code;
 }
 
-// Screen Management
-function showScreen(screenId) {
-    document.querySelectorAll('.auth-screen').forEach(screen => {
-        screen.classList.add('hidden');
-    });
-    document.getElementById(screenId).classList.remove('hidden');
+async function handleLogin(){
+  const email=$('loginEmail').value.trim(),pass=$('loginPassword').value;
+  if(!email||!pass){showAlert('loginAlert','Please fill all fields');return;}
+  showLoading();
+  try{await signInWithEmailAndPassword(auth,email,pass);}
+  catch(e){hideLoading();showAlert('loginAlert',friendlyErr(e.code));}
 }
 
-// Loading
-function showLoading() {
-    document.getElementById('loading').classList.add('active');
+async function handleSignup(){
+  const name=$('signupName').value.trim(),email=$('signupEmail').value.trim(),pass=$('signupPassword').value;
+  if(!name||!email||!pass){showAlert('signupAlert','Please fill all fields');return;}
+  if(pass.length<6){showAlert('signupAlert','Password must be at least 6 characters');return;}
+  showLoading();
+  try{
+    const cred=await createUserWithEmailAndPassword(auth,email,pass);
+    await fbUpdateProfile(cred.user,{displayName:name});
+    await setDoc(doc(db,'users',cred.user.uid),{name,email,createdAt:serverTimestamp(),photoURL:null});
+  }catch(e){hideLoading();showAlert('signupAlert',friendlyErr(e.code));}
 }
 
-function hideLoading() {
-    document.getElementById('loading').classList.remove('active');
+async function handleGoogleLogin(){
+  showLoading();
+  try{
+    const result=await signInWithPopup(auth,gp);
+    const u=result.user,ref=doc(db,'users',u.uid),snap=await getDoc(ref);
+    if(!snap.exists())await setDoc(ref,{name:u.displayName||'User',email:u.email,photoURL:u.photoURL||null,createdAt:serverTimestamp()});
+  }catch(e){hideLoading();showAlert('loginAlert',friendlyErr(e.code));}
 }
 
-// Alert Messages
-function showAlert(containerId, message, type = 'error') {
-    const container = document.getElementById(containerId);
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type}`;
-    alertDiv.textContent = message;
-    container.innerHTML = '';
-    container.appendChild(alertDiv);
-
-    setTimeout(() => {
-        alertDiv.remove();
-    }, 5000);
+async function handleForgotPassword(){
+  const email=$('forgotEmail').value.trim();
+  if(!email){showAlert('forgotAlert','Please enter your email');return;}
+  showLoading();
+  try{
+    await sendPasswordResetEmail(auth,email);
+    hideLoading();
+    showAlert('forgotAlert',`Reset email sent to <strong>${email}</strong>!`,'success');
+    setTimeout(()=>showScreen('loginScreen'),3000);
+  }catch(e){hideLoading();showAlert('forgotAlert',friendlyErr(e.code));}
 }
 
-// Auth Functions
-async function handleLogin() {
-    const email = document.getElementById('loginEmail').value.trim();
-    const password = document.getElementById('loginPassword').value;
+async function handleLogout(){if(!confirm('Logout?'))return;await signOut(auth);}
 
-    if (!email || !password) {
-        showAlert('loginAlert', 'Please fill all fields');
-        return;
-    }
-
-    showLoading();
-
-    setTimeout(() => {
-        hideLoading();
-
-        const users = JSON.parse(localStorage.getItem('taskmaster_users') || '[]');
-        const user = users.find(u => u.email === email && u.password === password);
-
-        if (user) {
-            if (!user.verified) {
-                showAlert('loginAlert', 'Please verify your email first');
-                return;
-            }
-
-            state.currentUser = user;
-            localStorage.setItem('taskmaster_user', JSON.stringify(user));
-            showApp();
-        } else {
-            showAlert('loginAlert', 'Invalid email or password');
-        }
-    }, 1000);
+async function loadProfile(fu){
+  const snap=await getDoc(doc(db,'users',fu.uid));
+  if(snap.exists())return{uid:fu.uid,name:snap.data().name||fu.displayName||'User',email:fu.email,photoURL:snap.data().photoURL||fu.photoURL||null,createdAt:snap.data().createdAt?.toDate?.()?.toISOString()||new Date().toISOString()};
+  return{uid:fu.uid,name:fu.displayName||'User',email:fu.email,photoURL:fu.photoURL||null,createdAt:new Date().toISOString()};
 }
 
-async function handleSignup() {
-    const name = document.getElementById('signupName').value.trim();
-    const email = document.getElementById('signupEmail').value.trim();
-    const password = document.getElementById('signupPassword').value;
-
-    if (!name || !email || !password) {
-        showAlert('signupAlert', 'Please fill all fields');
-        return;
-    }
-
-    if (password.length < 6) {
-        showAlert('signupAlert', 'Password must be at least 6 characters');
-        return;
-    }
-
-    showLoading();
-
-    setTimeout(() => {
-        hideLoading();
-
-        const users = JSON.parse(localStorage.getItem('taskmaster_users') || '[]');
-
-        if (users.find(u => u.email === email)) {
-            showAlert('signupAlert', 'Email already registered');
-            return;
-        }
-
-        const newUser = {
-            id: Date.now(),
-            name,
-            email,
-            password,
-            verified: false,
-            createdAt: new Date().toISOString()
-        };
-
-        users.push(newUser);
-        localStorage.setItem('taskmaster_users', JSON.stringify(users));
-
-        // Generate OTP
-        // Generate OTP
-        const generatedOtp = Math.floor(100000 + Math.random() * 900000);
-
-        // Send OTP through EmailJS
-        emailjs.send("service_tv8qwfs", "template_jykocjc", {
-            user_name: name,  // from your input
-            email: email,
-            otp: generatedOtp
-        })
-
-            .then(function () {
-                console.log("✅ OTP sent to " + signupEmail);
-                alert("OTP sent to your email!");
-            })
-            .catch(function (error) {
-                console.error("❌ EmailJS error:", error);
-            });
-
-
-
-        state.otpEmail = email;
-        document.getElementById('otpEmail').textContent = email;
-        showScreen('otpScreen');
-        startOTPTimer();
-
-
-    }, 1000);
+function subscribeToTasks(uid){
+  if(S.unsubTasks)S.unsubTasks();
+  const q=query(collection(db,'tasks'),where('uid','==',uid),orderBy('createdAt','desc'));
+  S.unsubTasks=onSnapshot(q,(snap)=>{
+    S.tasks=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderTasks();updateStats();checkNotifications();
+    const ap=document.querySelector('.page.active')?.id;
+    if(ap==='statsPage')updateStatsPage();
+    if(ap==='calendarPage')updateCalendar();
+    if(ap==='categoriesPage')updateCategories();
+  });
 }
 
-async function handleVerifyOTP() {
-    const otp = Array.from({ length: 6 }, (_, i) =>
-        document.getElementById(`otp${i + 1}`).value
-    ).join('');
-
-    if (otp.length !== 6) {
-        showAlert('otpAlert', 'Please enter complete OTP');
-        return;
-    }
-
-    showLoading();
-
-    setTimeout(async () => {
-        hideLoading();
-
-        const savedOTP = localStorage.getItem(`otp_${state.otpEmail}`);
-
-        if (otp === savedOTP) {
-            const users = JSON.parse(localStorage.getItem('taskmaster_users') || '[]');
-            const userIndex = users.findIndex(u => u.email === state.otpEmail);
-
-            if (userIndex !== -1) {
-                users[userIndex].verified = true;
-                localStorage.setItem('taskmaster_users', JSON.stringify(users));
-                localStorage.removeItem(`otp_${state.otpEmail}`);
-
-                showAlert('otpAlert', 'Email verified successfully!', 'success');
-                // 🟢 Save user in Firebase Firestore (dynamic import + await)
-                // 🟢 Save verified user in Firebase Firestore
-                try {
-                    await window.setDoc(window.doc(window.db, "users", state.otpEmail), {
-                        name: state.currentUser?.name || "New User",
-                        email: state.otpEmail,
-                        password: state.currentUser?.password || "******",
-                        verified: true,
-                        createdAt: new Date().toISOString()
-                    });
-                    console.log("User saved to Firestore ✅");
-                } catch (error) {
-                    console.error("Error saving user:", error);
-                }
-
-
-                setTimeout(() => {
-                    showScreen('loginScreen');
-                    showAlert('loginAlert', 'Please login with your credentials', 'success');
-                }, 1500);
-            }
-        } else {
-            showAlert('otpAlert', 'Invalid OTP');
-        }
-    }, 1000);
+function showApp(){
+  document.querySelectorAll('.auth-wrap').forEach(s=>s.classList.add('hidden'));
+  $('appContainer').classList.add('active');
+  hideLoading();
+  const{name,email,photoURL}=S.user;
+  syncAllAvatars(photoURL,name);
+  $('userName').textContent=name;$('userEmail').textContent=email;
+  $('profileName').textContent=name;$('profileEmail').textContent=email;
+  const hr=new Date().getHours();
+  const greet=hr<12?'GOOD MORNING':hr<17?'GOOD AFTERNOON':'GOOD EVENING';
+  $('greetingTime').textContent=greet;
+  $('greetingName').innerHTML=`Hey, <span>${esc(name.split(' ')[0])}</span>`;
+  setupTheme();
 }
 
-async function handleForgotPassword() {
-    const email = document.getElementById('forgotEmail').value.trim();
-
-    if (!email) {
-        showAlert('forgotAlert', 'Please enter your email');
-        return;
-    }
-
-    showLoading();
-
-    setTimeout(() => {
-        hideLoading();
-
-        const users = JSON.parse(localStorage.getItem('taskmaster_users') || '[]');
-        const user = users.find(u => u.email === email);
-
-        if (user) {
-            const email = document.getElementById("forgotEmail").value.trim();
-            if (!email) return showAlert("forgotAlert", "Please enter your email!", "error");
-
-            const otp = Math.floor(100000 + Math.random() * 900000).toString();
-            localStorage.setItem(`reset_otp_${email}`, otp);
-            showLoading();
-
-            emailjs.send("service_tv8qwfs", "template_jykocjc", {
-                email: email,
-                user_name: "User",
-                otp: otp
-            })
-                .then(() => {
-                    hideLoading();
-                    showAlert("forgotAlert", "OTP sent to your email!", "success");
-                    document.getElementById("forgotPasswordScreen").classList.add("hidden");
-                    document.getElementById("resetPasswordScreen").classList.remove("hidden");
-                })
-                .catch((error) => {
-                    hideLoading();
-                    console.error("EmailJS error:", error);
-                    showAlert("forgotAlert", "Failed to send OTP. Try again later.", "error");
-                });
-
-
-            state.otpEmail = email;
-            showScreen('resetPasswordScreen');
-
-            showAlert("forgotAlert", "OTP sent to your email!", "success");
-
-        } else {
-            showAlert('forgotAlert', 'Email not found');
-        }
-    }, 1000);
-}
-
-async function handleResetPassword() {
-    const otp = document.getElementById('resetOtp').value;
-    const newPassword = document.getElementById('newPassword').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-
-    if (!otp || !newPassword || !confirmPassword) {
-        showAlert('resetAlert', 'Please fill all fields');
-        return;
-    }
-
-    if (newPassword !== confirmPassword) {
-        showAlert('resetAlert', 'Passwords do not match');
-        return;
-    }
-
-    if (newPassword.length < 6) {
-        showAlert('resetAlert', 'Password must be at least 6 characters');
-        return;
-    }
-
-    showLoading();
-
-    setTimeout(() => {
-        hideLoading();
-
-        const savedOTP = localStorage.getItem(`reset_otp_${state.otpEmail}`);
-
-        if (otp === savedOTP) {
-            const users = JSON.parse(localStorage.getItem('taskmaster_users') || '[]');
-            const userIndex = users.findIndex(u => u.email === state.otpEmail);
-
-            if (userIndex !== -1) {
-                users[userIndex].password = newPassword;
-                localStorage.setItem('taskmaster_users', JSON.stringify(users));
-                localStorage.removeItem(`reset_otp_${state.otpEmail}`);
-
-                showAlert('resetAlert', 'Password reset successfully!', 'success');
-
-                setTimeout(() => {
-                    showScreen('loginScreen');
-                    showAlert('loginAlert', 'Please login with your new password', 'success');
-                }, 1500);
-            }
-        } else {
-            showAlert('resetAlert', 'Invalid OTP');
-        }
-    }, 1000);
-}
-
-function handleLogout() {
-    if (confirm('Are you sure you want to logout?')) {
-        localStorage.removeItem('taskmaster_user');
-        state.currentUser = null;
-        state.tasks = [];
-
-        document.getElementById('appContainer').classList.remove('active');
-        showScreen('loginScreen');
-    }
-}
-
-// OTP Functions
-function startOTPTimer() {
-    state.otpTimeLeft = 60;
-    document.getElementById('resendOtpBtn').disabled = true;
-
-    const timerEl = document.getElementById('otpTimer');
-
-    state.otpTimer = setInterval(() => {
-        state.otpTimeLeft--;
-        timerEl.textContent = `(${state.otpTimeLeft}s)`;
-
-        if (state.otpTimeLeft <= 0) {
-            clearInterval(state.otpTimer);
-            document.getElementById('resendOtpBtn').disabled = false;
-            timerEl.textContent = '';
-        }
-    }, 1000);
-}
-
-function resendOTP() {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    localStorage.setItem(`otp_${state.otpEmail}`, otp);
-    startOTPTimer();
-
-    emailjs.send("service_tv8qwfs", "template_jykocjc", {
-        email: state.otpEmail,
-        user_name: "User",
-        otp: otp
-    })
-        .then(() => {
-            showAlert('otpAlert', "New OTP sent to your email!", 'success');
-        })
-        .catch((error) => {
-            console.error("EmailJS resend error:", error);
-            showAlert('otpAlert', "Failed to resend OTP. Please try again.", 'error');
-        });
-}
-
-
-function setupOTPInputs() {
-    const inputs = document.querySelectorAll('.otp-input');
-
-    inputs.forEach((input, index) => {
-        input.addEventListener('input', (e) => {
-            if (e.target.value.length === 1 && index < inputs.length - 1) {
-                inputs[index + 1].focus();
-            }
-        });
-
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace' && !e.target.value && index > 0) {
-                inputs[index - 1].focus();
-            }
-        });
-
-        input.addEventListener('paste', (e) => {
-            e.preventDefault();
-            const pasteData = e.clipboardData.getData('text').slice(0, 6);
-            pasteData.split('').forEach((char, i) => {
-                if (inputs[index + i]) {
-                    inputs[index + i].value = char;
-                }
-            });
-        });
-    });
-}
-
-// Show App
-function showApp() {
-    document.querySelectorAll('.auth-screen').forEach(screen => {
-        screen.classList.add('hidden');
-    });
-    document.getElementById('appContainer').classList.add('active');
-
-    const initials = state.currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase();
-    document.getElementById('userAvatar').textContent = initials;
-    document.getElementById('userName').textContent = state.currentUser.name;
-    document.getElementById('userEmail').textContent = state.currentUser.email;
-    document.getElementById('profileAvatar').textContent = initials;
-    document.getElementById('profileName').textContent = state.currentUser.name;
-    document.getElementById('profileEmail').textContent = state.currentUser.email;
-
-    loadTasks();
-    updateStats();
-    checkNotifications();
-}
-
-// Navigation
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('active');
-    document.getElementById('sidebarOverlay').classList.toggle('active');
-}
-
-function handleNavigation(pageId) {
-    document.querySelectorAll('.page').forEach(page => {
-        page.classList.remove('active');
-    });
-    document.getElementById(pageId).classList.add('active');
-
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.page === pageId) {
-            item.classList.add('active');
-        }
-    });
-
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.page === pageId) {
-            btn.classList.add('active');
-        }
-    });
-
-    if (document.getElementById('sidebar').classList.contains('active')) {
-        toggleSidebar();
-    }
-
-    const titles = {
-        homePage: 'Tasks',
-        statsPage: 'Statistics',
-        calendarPage: 'Calendar',
-        categoriesPage: 'Categories',
-        settingsPage: 'Settings',
-        profilePage: 'Profile'
-    };
-    document.querySelector('.header-title').textContent = titles[pageId] || 'Tasks';
-
-    if (pageId === 'profilePage') updateProfile();
-    if (pageId === 'statsPage') updateStatsPage();
-    if (pageId === 'calendarPage') updateCalendar();
-    if (pageId === 'categoriesPage') updateCategories();
-    if (pageId === 'settingsPage') updateSettings();
-}
-
-// Task Management
-function loadTasks() {
-    const savedTasks = localStorage.getItem(`tasks_${state.currentUser.email}`);
-    state.tasks = savedTasks ? JSON.parse(savedTasks) : [];
-    renderTasks();
-}
-
-function saveTasks() {
-    localStorage.setItem(`tasks_${state.currentUser.email}`, JSON.stringify(state.tasks));
-    updateStats();
-    checkNotifications();
-}
-
-function renderTasks() {
-    let filteredTasks = [...state.tasks];
-
-    if (state.currentFilter === 'pending') {
-        filteredTasks = filteredTasks.filter(t => !t.completed);
-    } else if (state.currentFilter === 'completed') {
-        filteredTasks = filteredTasks.filter(t => t.completed);
-    } else if (state.currentFilter === 'high') {
-        filteredTasks = filteredTasks.filter(t => t.priority === 'high');
-    } else if (state.currentFilter === 'today') {
-        const today = new Date().toDateString();
-        filteredTasks = filteredTasks.filter(t =>
-            new Date(t.dueDate).toDateString() === today
-        );
-    }
-
-    filteredTasks.sort((a, b) => {
-        if (state.currentSort === 'priority') {
-            const priorityOrder = { high: 3, medium: 2, low: 1 };
-            return priorityOrder[b.priority] - priorityOrder[a.priority];
-        } else if (state.currentSort === 'category') {
-            return a.category.localeCompare(b.category);
-        } else {
-            return new Date(a.dueDate) - new Date(b.dueDate);
-        }
-    });
-
-    const tasksList = document.getElementById('tasksList');
-
-    if (filteredTasks.length === 0) {
-        tasksList.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">📝</div>
-                <h3>No tasks found</h3>
-                <p>Try a different filter or add a new task</p>
-            </div>
-        `;
-        return;
-    }
-
-    tasksList.innerHTML = filteredTasks.map(task => `
-        <div class="task-card priority-${task.priority}">
-            <div class="task-header">
-                <input type="checkbox" class="task-checkbox" 
-                    ${task.completed ? 'checked' : ''} 
-                    onchange="toggleTask(${task.id})">
-                <div class="task-content">
-                    <div class="task-title" style="${task.completed ? 'text-decoration: line-through; opacity: 0.6;' : ''}">
-                        ${task.title}
-                    </div>
-                    <div class="task-meta">
-                        <span class="badge badge-category">${task.category}</span>
-                        <span class="badge badge-priority ${task.priority}">${task.priority}</span>
-                        <span>📅 ${formatDate(task.dueDate)}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="task-actions">
-                <button class="task-btn btn-edit" onclick="editTask(${task.id})">✏️ Edit</button>
-                <button class="task-btn btn-delete" onclick="deleteTask(${task.id})">🗑️ Delete</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-function openTaskModal(taskId = null) {
-    state.editingTaskId = taskId;
-    const modal = document.getElementById('taskModal');
-
-    if (taskId) {
-        const task = state.tasks.find(t => t.id === taskId);
-        document.getElementById('modalTitle').textContent = 'Edit Task';
-        document.getElementById('taskTitle').value = task.title;
-        document.getElementById('taskCategory').value = task.category;
-        document.getElementById('taskPriority').value = task.priority;
-        document.getElementById('taskDueDate').value = task.dueDate;
-    } else {
-        document.getElementById('modalTitle').textContent = 'Add Task';
-        document.getElementById('taskTitle').value = '';
-        document.getElementById('taskCategory').value = 'Personal';
-        document.getElementById('taskPriority').value = 'medium';
-        document.getElementById('taskDueDate').value = '';
-    }
-
-    modal.classList.add('active');
-}
-
-function closeTaskModal() {
-    document.getElementById('taskModal').classList.remove('active');
-    state.editingTaskId = null;
-}
-
-function saveTask() {
-    const title = document.getElementById('taskTitle').value.trim();
-    const category = document.getElementById('taskCategory').value;
-    const priority = document.getElementById('taskPriority').value;
-    const dueDate = document.getElementById('taskDueDate').value;
-
-    if (!title || !dueDate) {
-        alert('Please fill all required fields');
-        return;
-    }
-
-    if (state.editingTaskId) {
-        const taskIndex = state.tasks.findIndex(t => t.id === state.editingTaskId);
-        state.tasks[taskIndex] = {
-            ...state.tasks[taskIndex],
-            title,
-            category,
-            priority,
-            dueDate
-        };
-    } else {
-        const newTask = {
-            id: Date.now(),
-            title,
-            category,
-            priority,
-            dueDate,
-            completed: false,
-            createdAt: new Date().toISOString()
-        };
-        state.tasks.push(newTask);
-    }
-
-    saveTasks();
-    renderTasks();
+async function saveTask(){
+  const title=$('taskTitle').value.trim(),category=$('taskCategory').value,priority=$('taskPriority').value,dueDate=$('taskDueDate').value;
+  if(!title||!dueDate){showAlert('taskModalAlert','Please fill all required fields');return;}
+  showLoading();
+  try{
+    if(S.editingId){await updateDoc(doc(db,'tasks',S.editingId),{title,category,priority,dueDate,updatedAt:serverTimestamp()});}
+    else{await addDoc(collection(db,'tasks'),{uid:S.user.uid,title,category,priority,dueDate,completed:false,createdAt:serverTimestamp()});}
     closeTaskModal();
-
-    // Update calendar if on calendar page
-    if (document.getElementById('calendarPage').classList.contains('active')) {
-        updateCalendar();
-    }
+  }catch(e){showAlert('taskModalAlert','Error: '+e.message);}
+  hideLoading();
 }
 
-function toggleTask(taskId) {
-    const task = state.tasks.find(t => t.id === taskId);
-    task.completed = !task.completed;
-    saveTasks();
-    renderTasks();
+window.toggleTask=async(id)=>{const t=S.tasks.find(t=>t.id===id);if(t)await updateDoc(doc(db,'tasks',id),{completed:!t.completed});};
+window.editTask=(id)=>openTaskModal(id);
+window.deleteTask=async(id)=>{if(!confirm('Delete this task?'))return;await deleteDoc(doc(db,'tasks',id));};
 
-    // Update calendar if on calendar page
-    if (document.getElementById('calendarPage').classList.contains('active')) {
-        updateCalendar();
-    }
+function openTaskModal(id=null){
+  S.editingId=id;
+  if(id){
+    const t=S.tasks.find(t=>t.id===id);
+    $('modalTitle').textContent='Edit Task';$('taskTitle').value=t.title;
+    $('taskCategory').value=t.category;$('taskPriority').value=t.priority;$('taskDueDate').value=t.dueDate;
+  }else{
+    $('modalTitle').textContent='New Task';$('taskTitle').value='';
+    $('taskCategory').value='Personal';$('taskPriority').value='medium';$('taskDueDate').value='';
+  }
+  $('taskModalAlert').innerHTML='';$('taskModal').classList.add('active');
+}
+function closeTaskModal(){$('taskModal').classList.remove('active');S.editingId=null;}
+
+function renderTasks(){
+  let f=[...S.tasks];
+  if(S.filter==='pending')f=f.filter(t=>!t.completed);
+  else if(S.filter==='completed')f=f.filter(t=>t.completed);
+  else if(S.filter==='high')f=f.filter(t=>t.priority==='high');
+  else if(S.filter==='today'){const td=new Date().toDateString();f=f.filter(t=>new Date(t.dueDate).toDateString()===td);}
+  f.sort((a,b)=>{
+    if(S.sort==='priority')return({high:3,medium:2,low:1}[b.priority])-({high:3,medium:2,low:1}[a.priority]);
+    if(S.sort==='category')return a.category.localeCompare(b.category);
+    return new Date(a.dueDate)-new Date(b.dueDate);
+  });
+  const el=$('tasksList');
+  if(!f.length){el.innerHTML=`<div class="empty"><svg width="40" height="40"><use href="#ic-task"/></svg><h3>No tasks found</h3><p>Try a different filter or add a task</p></div>`;return;}
+  el.innerHTML=f.map(taskCardHTML).join('');
 }
 
-function editTask(taskId) {
-    openTaskModal(taskId);
-}
-
-function deleteTask(taskId) {
-    if (confirm('Are you sure you want to delete this task?')) {
-        state.tasks = state.tasks.filter(t => t.id !== taskId);
-        saveTasks();
-        renderTasks();
-
-        // Update calendar if on calendar page
-        if (document.getElementById('calendarPage').classList.contains('active')) {
-            updateCalendar();
-        }
-    }
-}
-
-window.toggleTask = toggleTask;
-window.editTask = editTask;
-window.deleteTask = deleteTask;
-window.openEditProfile = openEditProfile;
-
-function handleFilter(filter) {
-    state.currentFilter = filter;
-
-    document.querySelectorAll('.chip[data-filter]').forEach(chip => {
-        chip.classList.remove('active');
-        if (chip.dataset.filter === filter) {
-            chip.classList.add('active');
-        }
-    });
-
-    renderTasks();
-}
-
-function updateStats() {
-    const total = state.tasks.length;
-    const completed = state.tasks.filter(t => t.completed).length;
-    const pending = total - completed;
-    const overdue = state.tasks.filter(t =>
-        !t.completed && new Date(t.dueDate) < new Date()
-    ).length;
-
-    document.getElementById('totalTasks').textContent = total;
-    document.getElementById('completedTasks').textContent = completed;
-    document.getElementById('pendingTasks').textContent = pending;
-    document.getElementById('overdueTasks').textContent = overdue;
-}
-
-function checkNotifications() {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const upcomingTasks = state.tasks.filter(t => {
-        if (t.completed) return false;
-        const dueDate = new Date(t.dueDate);
-        return dueDate <= tomorrow;
-    });
-
-    const badge = document.getElementById('notifBadge');
-    if (upcomingTasks.length > 0) {
-        badge.textContent = upcomingTasks.length;
-        badge.style.display = 'flex';
-    } else {
-        badge.style.display = 'none';
-    }
-
-    updateNotificationList(upcomingTasks);
-}
-
-function updateNotificationList(tasks) {
-    const list = document.getElementById('notificationList');
-
-    if (tasks.length === 0) {
-        list.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">📭</div>
-                <p>No notifications</p>
-            </div>
-        `;
-        return;
-    }
-
-    list.innerHTML = tasks.map(task => {
-        const dueDate = new Date(task.dueDate);
-        const isOverdue = dueDate < new Date();
-        const className = isOverdue ? 'danger' : 'warning';
-
-        return `
-            <div class="notification-item ${className}">
-                <p><strong>${task.title}</strong></p>
-                <small>${isOverdue ? '⚠️ Overdue' : '⏰ Due soon'}: ${formatDate(task.dueDate)}</small>
-            </div>
-        `;
-    }).join('');
-}
-
-function toggleNotifications() {
-    document.getElementById('notificationPanel').classList.toggle('active');
-}
-
-function openSearch() {
-    document.getElementById('searchModal').classList.add('active');
-    document.getElementById('searchInput').focus();
-}
-
-function closeSearch() {
-    document.getElementById('searchModal').classList.remove('active');
-    document.getElementById('searchInput').value = '';
-    document.getElementById('searchResults').innerHTML = '';
-}
-
-function handleSearch(e) {
-    const query = e.target.value.toLowerCase();
-    const results = document.getElementById('searchResults');
-
-    if (!query) {
-        results.innerHTML = '';
-        return;
-    }
-
-    const filteredTasks = state.tasks.filter(task =>
-        task.title.toLowerCase().includes(query) ||
-        task.category.toLowerCase().includes(query)
-    );
-
-    if (filteredTasks.length === 0) {
-        results.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
-        return;
-    }
-
-    results.innerHTML = filteredTasks.map(task => `
-        <div class="task-card priority-${task.priority}" onclick="closeSearch(); editTask(${task.id})">
-            <div class="task-header">
-                <div class="task-content">
-                    <div class="task-title">${task.title}</div>
-                    <div class="task-meta">
-                        <span class="badge badge-category">${task.category}</span>
-                        <span>📅 ${formatDate(task.dueDate)}</span>
-                    </div>
-                </div>
-            </div>
+function taskCardHTML(t){
+  const isOverdue=!t.completed&&new Date(t.dueDate)<new Date();
+  const dateLabel=fmtDate(t.dueDate);
+  return`<div class="task-card priority-${t.priority}">
+    <div class="task-hdr">
+      <input type="checkbox" class="task-cb" ${t.completed?'checked':''} onchange="toggleTask('${t.id}')">
+      <div class="task-body">
+        <div class="task-title" style="${t.completed?'text-decoration:line-through;opacity:.4':''}">${esc(t.title)}</div>
+        <div class="task-meta">
+          <span class="badge badge-cat">${esc(t.category)}</span>
+          <span class="badge badge-${t.priority}">${t.priority}</span>
+          <span style="${isOverdue?'color:var(--rose)':''}">
+            <svg width="11" height="11" style="vertical-align:middle;margin-right:2px"><use href="#ic-clock"/></svg>${dateLabel}
+          </span>
         </div>
-    `).join('');
+      </div>
+    </div>
+    <div class="task-actions">
+      <button class="t-btn t-btn-edit" onclick="editTask('${t.id}')">
+        <svg width="12" height="12"><use href="#ic-edit"/></svg> Edit
+      </button>
+      <button class="t-btn t-btn-del" onclick="deleteTask('${t.id}')">
+        <svg width="12" height="12"><use href="#ic-trash"/></svg> Delete
+      </button>
+    </div>
+  </div>`;
 }
 
-function updateProfile() {
-    const total = state.tasks.length;
-    const completed = state.tasks.filter(t => t.completed).length;
-    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    document.getElementById('profileTotalTasks').textContent = total;
-    document.getElementById('profileCompletedTasks').textContent = completed;
-    document.getElementById('profileCompletionRate').textContent = rate + '%';
-
-    const memberSince = new Date(state.currentUser.createdAt);
-    document.getElementById('profileMemberSince').textContent =
-        memberSince.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+function updateStats(){
+  const total=S.tasks.length,done=S.tasks.filter(t=>t.completed).length;
+  $('totalTasks').textContent=total;$('completedTasks').textContent=done;
+  $('pendingTasks').textContent=total-done;
+  $('overdueTasks').textContent=S.tasks.filter(t=>!t.completed&&new Date(t.dueDate)<new Date()).length;
 }
 
-function openEditProfile() {
-    document.getElementById('editName').value = state.currentUser.name;
-    document.getElementById('editEmail').value = state.currentUser.email;
-    document.getElementById('editProfileModal').classList.add('active');
+function checkNotifications(){
+  const tom=new Date();tom.setDate(tom.getDate()+1);
+  const up=S.tasks.filter(t=>!t.completed&&new Date(t.dueDate)<=tom);
+  const b=$('notifBadge');b.textContent=up.length;b.style.display=up.length>0?'flex':'none';
+  const list=$('notifList');
+  if(!up.length){list.innerHTML=`<div class="empty"><svg width="32" height="32"><use href="#ic-bell"/></svg><p>No notifications</p></div>`;return;}
+  list.innerHTML=up.map(t=>{const ov=new Date(t.dueDate)<new Date();
+    return`<div class="notif-item ${ov?'danger':'warn'}">
+      <p style="font-weight:600;margin-bottom:.15rem">${esc(t.title)}</p>
+      <small style="color:var(--t2)">${ov?'Overdue':'Due soon'} · ${fmtDate(t.dueDate)}</small>
+    </div>`}).join('');
 }
 
-function closeEditProfile() {
-    document.getElementById('editProfileModal').classList.remove('active');
+function openSearch(){$('searchModal').classList.add('active');$('searchInput').focus();}
+function closeSearch(){$('searchModal').classList.remove('active');$('searchInput').value='';$('searchResults').innerHTML='';}
+window.closeSearch=closeSearch;
+
+function handleSearch(e){
+  const q=e.target.value.toLowerCase(),res=$('searchResults');
+  if(!q){res.innerHTML='';return;}
+  const found=S.tasks.filter(t=>t.title.toLowerCase().includes(q)||t.category.toLowerCase().includes(q));
+  if(!found.length){res.innerHTML='<div class="empty"><p>No results found</p></div>';return;}
+  res.innerHTML=found.map(t=>`<div class="task-card priority-${t.priority}" onclick="closeSearch();editTask('${t.id}')">
+    <div class="task-hdr"><div class="task-body">
+      <div class="task-title">${esc(t.title)}</div>
+      <div class="task-meta"><span class="badge badge-cat">${esc(t.category)}</span><span>${fmtDate(t.dueDate)}</span></div>
+    </div></div></div>`).join('');
 }
 
-function saveProfile() {
-    const newName = document.getElementById('editName').value.trim();
-
-    if (!newName) {
-        showAlert('editProfileAlert', 'Name cannot be empty');
-        return;
-    }
-
-    state.currentUser.name = newName;
-
-    const users = JSON.parse(localStorage.getItem('taskmaster_users') || '[]');
-    const userIndex = users.findIndex(u => u.email === state.currentUser.email);
-    if (userIndex !== -1) {
-        users[userIndex].name = newName;
-        localStorage.setItem('taskmaster_users', JSON.stringify(users));
-    }
-
-    localStorage.setItem('taskmaster_user', JSON.stringify(state.currentUser));
-
-    const initials = newName.split(' ').map(n => n[0]).join('').toUpperCase();
-    document.getElementById('userAvatar').textContent = initials;
-    document.getElementById('userName').textContent = newName;
-    document.getElementById('profileAvatar').textContent = initials;
-    document.getElementById('profileName').textContent = newName;
-
-    showAlert('editProfileAlert', 'Profile updated successfully!', 'success');
-
-    setTimeout(() => {
-        closeEditProfile();
-    }, 1500);
+function updateProfilePage(){
+  const total=S.tasks.length,done=S.tasks.filter(t=>t.completed).length,rate=total>0?Math.round((done/total)*100):0;
+  $('profileTotalTasks').textContent=total;$('profileCompletedTasks').textContent=done;
+  $('profileCompletionRate').textContent=rate+'%';
+  const d=new Date(S.user.createdAt);
+  $('profileMemberSince').textContent=isNaN(d)?'Recently':d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
 }
 
-function updateStatsPage() {
-    const statsContainer = document.getElementById('statsPage');
+// ── PHOTO UPLOAD STATE ──
+let pendingPhotoDataURL = null; // null = no change, '' = remove, 'data:...' = new photo
 
-    const total = state.tasks.length;
-    const completed = state.tasks.filter(t => t.completed).length;
-    const pending = total - completed;
-    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    const categoryStats = state.categories.map(cat => {
-        const catTasks = state.tasks.filter(t => t.category === cat);
-        return {
-            name: cat,
-            count: catTasks.length,
-            completed: catTasks.filter(t => t.completed).length
-        };
-    });
-
-    const priorityStats = {
-        high: state.tasks.filter(t => t.priority === 'high').length,
-        medium: state.tasks.filter(t => t.priority === 'medium').length,
-        low: state.tasks.filter(t => t.priority === 'low').length
+function compressImage(file, maxPx=200, quality=0.82){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement('canvas');
+        let w=img.width,h=img.height;
+        if(w>h){if(w>maxPx){h=Math.round(h*maxPx/w);w=maxPx;}}
+        else{if(h>maxPx){w=Math.round(w*maxPx/h);h=maxPx;}}
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg',quality));
+      };
+      img.onerror=reject;
+      img.src=e.target.result;
     };
-
-    statsContainer.innerHTML = `
-        <div class="stats-page">
-            <div class="chart-card">
-                <h3 class="chart-title">📊 Overall Progress</h3>
-                <div style="text-align: center; padding: 2rem 0;">
-                    <div style="font-size: 4rem; font-weight: 700; color: var(--primary);">${completionRate}%</div>
-                    <p style="color: var(--text-secondary); margin-top: 0.5rem;">Completion Rate</p>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${completionRate}%;"></div>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-top: 1rem; font-size: 0.875rem;">
-                    <span>${completed} Completed</span>
-                    <span>${pending} Pending</span>
-                </div>
-            </div>
-            
-            <div class="chart-card">
-                <h3 class="chart-title">📁 Tasks by Category</h3>
-                ${categoryStats.map(cat => `
-                    <div style="margin-bottom: 1rem;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="font-weight: 600;">${cat.name}</span>
-                            <span>${cat.completed}/${cat.count}</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${cat.count > 0 ? (cat.completed / cat.count) * 100 : 0}%;"></div>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-            
-            <div class="chart-card">
-                <h3 class="chart-title">🎯 Tasks by Priority</h3>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1rem;">
-                    <div style="text-align: center; padding: 1.5rem; background: var(--bg-card); border-radius: 0.75rem; border: 2px solid var(--danger);">
-                        <div style="font-size: 2rem; color: var(--danger); font-weight: 700;">${priorityStats.high}</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">High</div>
-                    </div>
-                    <div style="text-align: center; padding: 1.5rem; background: var(--bg-card); border-radius: 0.75rem; border: 2px solid var(--warning);">
-                        <div style="font-size: 2rem; color: var(--warning); font-weight: 700;">${priorityStats.medium}</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">Medium</div>
-                    </div>
-                    <div style="text-align: center; padding: 1.5rem; background: var(--bg-card); border-radius: 0.75rem; border: 2px solid var(--secondary);">
-                        <div style="font-size: 2rem; color: var(--secondary); font-weight: 700;">${priorityStats.low}</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">Low</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="chart-card">
-                <h3 class="chart-title">📈 Activity Summary</h3>
-                <div class="profile-item">
-                    <span>Total Tasks Created</span>
-                    <strong style="color: var(--primary);">${total}</strong>
-                </div>
-                <div class="profile-item">
-                    <span>Tasks Completed</span>
-                    <strong style="color: var(--secondary);">${completed}</strong>
-                </div>
-                <div class="profile-item">
-                    <span>Tasks Pending</span>
-                    <strong style="color: var(--warning);">${pending}</strong>
-                </div>
-                <div class="profile-item">
-                    <span>Success Rate</span>
-                    <strong style="color: var(--info);">${completionRate}%</strong>
-                </div>
-            </div>
-        </div>
-    `;
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
 }
 
-function updateCalendar() {
-    const calendarContainer = document.getElementById('calendarPage');
-    const currentMonth = state.calendarMonth;
-    const currentYear = state.calendarYear;
-
-    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
-
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    let calendarHTML = `
-        <div class="calendar-container">
-            <div class="calendar-header">
-                <button class="icon-btn" onclick="changeMonth(-1)">◀</button>
-                <h2>${monthNames[currentMonth]} ${currentYear}</h2>
-                <button class="icon-btn" onclick="changeMonth(1)">▶</button>
-            </div>
-            
-            <div class="calendar-grid">
-                ${dayNames.map(day => `
-                    <div style="text-align: center; font-weight: 700; color: var(--text-secondary); padding: 0.5rem;">
-                        ${day}
-                    </div>
-                `).join('')}
-    `;
-
-    for (let i = 0; i < firstDay; i++) {
-        calendarHTML += '<div class="calendar-day" style="opacity: 0.3;"></div>';
-    }
-
-    const today = new Date();
-    const isCurrentMonth = currentMonth === today.getMonth() && currentYear === today.getFullYear();
-
-    for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(currentYear, currentMonth, day);
-        const dateStr = date.toDateString();
-        const todayStr = today.toDateString();
-        const isToday = dateStr === todayStr;
-
-        const dayTasks = state.tasks.filter(t => {
-            const taskDate = new Date(t.dueDate).toDateString();
-            return taskDate === dateStr;
-        });
-
-        const hasTasks = dayTasks.length > 0;
-
-        calendarHTML += `
-            <div class="calendar-day ${isToday ? 'today' : ''} ${hasTasks ? 'has-tasks' : ''}" 
-                 onclick="showDayTasks(${currentYear}, ${currentMonth}, ${day})"
-                 style="cursor: pointer;">
-                <div>${day}</div>
-                ${hasTasks ? `
-                    <div style="position: absolute; bottom: 2px; right: 2px; font-size: 0.65rem; background: var(--primary); color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;">
-                        ${dayTasks.length}
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    const selectedDay = isCurrentMonth ? today.getDate() : 1;
-    const selectedDate = new Date(currentYear, currentMonth, selectedDay);
-    const selectedTasks = state.tasks.filter(t => {
-        const taskDate = new Date(t.dueDate).toDateString();
-        return taskDate === selectedDate.toDateString();
-    });
-
-    calendarHTML += `
-            </div>
-            
-            <div class="chart-card" style="margin-top: 1rem;">
-                <h3 class="chart-title">📅 ${isCurrentMonth && selectedDay === today.getDate() ? "Today's Tasks" : `Tasks for ${monthNames[currentMonth]} ${selectedDay}`}</h3>
-                <div id="calendarDayTasks">
-                    ${selectedTasks.length === 0 ?
-            '<div class="empty-state"><div class="empty-icon">📅</div><p>No tasks for this day</p></div>' :
-            selectedTasks.map(task => `
-                            <div class="task-card priority-${task.priority}" style="margin-bottom: 0.75rem;">
-                                <div class="task-header">
-                                    <input type="checkbox" class="task-checkbox" 
-                                        ${task.completed ? 'checked' : ''} 
-                                        onchange="toggleTask(${task.id})">
-                                    <div class="task-content">
-                                        <div class="task-title" style="${task.completed ? 'text-decoration: line-through; opacity: 0.6;' : ''}">
-                                            ${task.title}
-                                        </div>
-                                        <div class="task-meta">
-                                            <span class="badge badge-category">${task.category}</span>
-                                            <span class="badge badge-priority ${task.priority}">${task.priority}</span>
-                                            <span>⏰ ${new Date(task.dueDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="task-actions">
-                                    <button class="task-btn btn-edit" onclick="editTask(${task.id})">✏️ Edit</button>
-                                    <button class="task-btn btn-delete" onclick="deleteTask(${task.id})">🗑️ Delete</button>
-                                </div>
-                            </div>
-                        `).join('')
-        }
-                </div>
-            </div>
-        </div>
-    `;
-
-    calendarContainer.innerHTML = calendarHTML;
+function syncAllAvatars(photoURL, name){
+  const initials=name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  const setAv=(id)=>{
+    const el=$(id);if(!el)return;
+    if(photoURL){el.innerHTML=`<img src="${photoURL}" alt="${esc(name)}">`;}
+    else{el.innerHTML='';el.textContent=initials;}
+  };
+  setAv('userAvatar');setAv('profileAvatar');setAv('editAvatarPreview');
 }
 
-window.changeMonth = function (direction) {
-    state.calendarMonth += direction;
+window.openEditProfile=function(){
+  pendingPhotoDataURL=null;
+  $('editName').value=S.user.name;
+  $('editEmail').value=S.user.email;
+  $('editProfileAlert').innerHTML='';
 
-    if (state.calendarMonth > 11) {
-        state.calendarMonth = 0;
-        state.calendarYear++;
-    } else if (state.calendarMonth < 0) {
-        state.calendarMonth = 11;
-        state.calendarYear--;
-    }
-
-    updateCalendar();
+  // Show current photo or initials in preview
+  const prev=$('editAvatarPreview');
+  const initials=S.user.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  if(S.user.photoURL){
+    prev.innerHTML=`<img src="${S.user.photoURL}" alt="avatar">`;
+    $('removePhotoBtn').classList.remove('hidden');
+  }else{
+    prev.innerHTML='';prev.textContent=initials;
+    $('removePhotoBtn').classList.add('hidden');
+  }
+  $('editProfileModal').classList.add('active');
 };
 
-window.showDayTasks = function (year, month, day) {
-    const selectedDate = new Date(year, month, day);
-    const selectedTasks = state.tasks.filter(t => {
-        const taskDate = new Date(t.dueDate).toDateString();
-        return taskDate === selectedDate.toDateString();
+// File input handler — called from setupEvents
+function setupPhotoInput(){
+  const fileInp=document.getElementById('photoFileInput');
+  if(fileInp){
+    fileInp.addEventListener('change',async(e)=>{
+      const file=e.target.files[0];
+      if(!file)return;
+      if(file.size>8*1024*1024){showAlert('editProfileAlert','Image too large. Max 8MB.');return;}
+      try{
+        const dataURL=await compressImage(file);
+        pendingPhotoDataURL=dataURL;
+        const prev=$('editAvatarPreview');
+        prev.innerHTML=`<img src="${dataURL}" alt="preview">`;
+        $('removePhotoBtn').classList.remove('hidden');
+      }catch(err){showAlert('editProfileAlert','Could not read image.');}
+      fileInp.value='';
     });
-
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
-
-    const dayTasksContainer = document.getElementById('calendarDayTasks');
-    const today = new Date();
-    const isToday = selectedDate.toDateString() === today.toDateString();
-
-    const titleElement = dayTasksContainer.parentElement.querySelector('.chart-title');
-    titleElement.textContent = `📅 ${isToday ? "Today's Tasks" : `Tasks for ${monthNames[month]} ${day}, ${year}`}`;
-
-    if (selectedTasks.length === 0) {
-        dayTasksContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">📅</div><p>No tasks for this day</p></div>';
-        return;
-    }
-
-    dayTasksContainer.innerHTML = selectedTasks.map(task => `
-        <div class="task-card priority-${task.priority}" style="margin-bottom: 0.75rem;">
-            <div class="task-header">
-                <input type="checkbox" class="task-checkbox" 
-                    ${task.completed ? 'checked' : ''} 
-                    onchange="toggleTask(${task.id})">
-                <div class="task-content">
-                    <div class="task-title" style="${task.completed ? 'text-decoration: line-through; opacity: 0.6;' : ''}">
-                        ${task.title}
-                    </div>
-                    <div class="task-meta">
-                        <span class="badge badge-category">${task.category}</span>
-                        <span class="badge badge-priority ${task.priority}">${task.priority}</span>
-                        <span>⏰ ${new Date(task.dueDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="task-actions">
-                <button class="task-btn btn-edit" onclick="editTask(${task.id})">✏️ Edit</button>
-                <button class="task-btn btn-delete" onclick="deleteTask(${task.id})">🗑️ Delete</button>
-            </div>
-        </div>
-    `).join('');
-};
-
-function updateCategories() {
-    const categoriesContainer = document.getElementById('categoriesPage');
-
-    const categoryData = state.categories.map(cat => {
-        const catTasks = state.tasks.filter(t => t.category === cat);
-        const completed = catTasks.filter(t => t.completed).length;
-
-        const icons = {
-            'Personal': '📱',
-            'Work': '💼',
-            'Shopping': '🛒',
-            'Study': '📚'
-        };
-
-        return {
-            name: cat,
-            icon: icons[cat] || '📁',
-            total: catTasks.length,
-            completed: completed,
-            pending: catTasks.length - completed
-        };
-    });
-
-    categoriesContainer.innerHTML = `
-        <div class="categories-page">
-            <div class="chart-card">
-                <h3 class="chart-title">📁 All Categories</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Manage and view your tasks by category
-                </p>
-                
-                ${categoryData.map(cat => `
-                    <div class="category-card" onclick="filterByCategory('${cat.name}')">
-                        <div class="category-info">
-                            <div class="category-icon">${cat.icon}</div>
-                            <div>
-                                <div style="font-weight: 700; font-size: 1.1rem;">${cat.name}</div>
-                                <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                                    ${cat.completed} completed, ${cat.pending} pending
-                                </div>
-                            </div>
-                        </div>
-                        <div class="category-count">${cat.total}</div>
-                    </div>
-                `).join('')}
-            </div>
-            
-            <div class="chart-card">
-                <h3 class="chart-title">📊 Category Statistics</h3>
-                ${categoryData.map(cat => {
-        const percentage = cat.total > 0 ? Math.round((cat.completed / cat.total) * 100) : 0;
-        return `
-                        <div style="margin-bottom: 1.5rem;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <span style="font-size: 1.5rem;">${cat.icon}</span>
-                                    <span style="font-weight: 600;">${cat.name}</span>
-                                </div>
-                                <span style="font-weight: 700; color: var(--primary);">${percentage}%</span>
-                            </div>
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: ${percentage}%;"></div>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin-top: 0.25rem; font-size: 0.75rem; color: var(--text-secondary);">
-                                <span>${cat.completed} completed</span>
-                                <span>${cat.total} total</span>
-                            </div>
-                        </div>
-                    `;
-    }).join('')}
-            </div>
-        </div>
-    `;
+  }
 }
 
-window.filterByCategory = function (category) {
-    handleNavigation('homePage');
-    setTimeout(() => {
-        const categoryTasks = state.tasks.filter(t => t.category === category);
-        const tasksList = document.getElementById('tasksList');
-
-        if (categoryTasks.length === 0) {
-            tasksList.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">📁</div>
-                    <h3>No ${category} tasks</h3>
-                    <p>Create a new task in this category</p>
-                </div>
-            `;
-            return;
-        }
-
-        tasksList.innerHTML = categoryTasks.map(task => `
-            <div class="task-card priority-${task.priority}">
-                <div class="task-header">
-                    <input type="checkbox" class="task-checkbox" 
-                        ${task.completed ? 'checked' : ''} 
-                        onchange="toggleTask(${task.id})">
-                    <div class="task-content">
-                        <div class="task-title" style="${task.completed ? 'text-decoration: line-through; opacity: 0.6;' : ''}">
-                            ${task.title}
-                        </div>
-                        <div class="task-meta">
-                            <span class="badge badge-category">${task.category}</span>
-                            <span class="badge badge-priority ${task.priority}">${task.priority}</span>
-                            <span>📅 ${formatDate(task.dueDate)}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="task-actions">
-                    <button class="task-btn btn-edit" onclick="editTask(${task.id})">✏️ Edit</button>
-                    <button class="task-btn btn-delete" onclick="deleteTask(${task.id})">🗑️ Delete</button>
-                </div>
-            </div>
-        `).join('');
-    }, 100);
+window.removePhoto=function(){
+  pendingPhotoDataURL=''; // empty string = remove
+  const initials=($('editName').value.trim()||S.user.name).split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  const prev=$('editAvatarPreview');
+  prev.innerHTML='';prev.textContent=initials;
+  $('removePhotoBtn').classList.add('hidden');
 };
 
-function updateSettings() {
-    const settingsContainer = document.getElementById('settingsPage');
+function closeEditProfile(){$('editProfileModal').classList.remove('active');pendingPhotoDataURL=null;}
 
-    const settings = JSON.parse(localStorage.getItem('taskmaster_settings') || '{}');
-    const theme = settings.theme || 'dark';
-    const notifications = settings.notifications !== false;
-    const sound = settings.sound !== false;
+async function saveProfile(){
+  const newName=$('editName').value.trim();
+  if(!newName){showAlert('editProfileAlert','Name cannot be empty');return;}
+  showLoading();
+  try{
+    const u=auth.currentUser;
+    let newPhotoURL=S.user.photoURL;
 
-    settingsContainer.innerHTML = `
-        <div class="settings-page">
-            <div class="settings-group">
-                <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>🎨</span> Appearance
-                </h3>
-                <div class="settings-item" onclick="toggleTheme()">
-                    <div>
-                        <div class="settings-label">Dark Mode</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                            Switch between light and dark theme
-                        </div>
-                    </div>
-                    <div class="toggle-switch ${theme === 'dark' ? 'active' : ''}" id="themeToggle">
-                        <div class="toggle-slider"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="settings-group">
-                <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>🔔</span> Notifications
-                </h3>
-                <div class="settings-item" onclick="toggleSetting('notifications')">
-                    <div>
-                        <div class="settings-label">Push Notifications</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                            Get notified about upcoming tasks
-                        </div>
-                    </div>
-                    <div class="toggle-switch ${notifications ? 'active' : ''}" id="notificationsToggle">
-                        <div class="toggle-slider"></div>
-                    </div>
-                </div>
-                
-                <div class="settings-item" onclick="toggleSetting('sound')">
-                    <div>
-                        <div class="settings-label">Sound Effects</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                            Play sounds for actions
-                        </div>
-                    </div>
-                    <div class="toggle-switch ${sound ? 'active' : ''}" id="soundToggle">
-                        <div class="toggle-slider"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="settings-group">
-                <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>👤</span> Account
-                </h3>
-                <div class="settings-item" onclick="openEditProfile()">
-                    <div>
-                        <div class="settings-label">Edit Profile</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                            Update your name and information
-                        </div>
-                    </div>
-                    <span style="font-size: 1.25rem;">▶</span>
-                </div>
-                
-                <div class="settings-item" onclick="changePassword()">
-                    <div>
-                        <div class="settings-label">Change Password</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                            Update your account password
-                        </div>
-                    </div>
-                    <span style="font-size: 1.25rem;">▶</span>
-                </div>
-            </div>
-            
-            <div class="settings-group">
-                <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>📊</span> Data
-                </h3>
-                <div class="settings-item" onclick="exportData()">
-                    <div>
-                        <div class="settings-label">Export Data</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                            Download all your tasks
-                        </div>
-                    </div>
-                    <span style="font-size: 1.25rem;">📥</span>
-                </div>
-                
-                <div class="settings-item" onclick="clearData()">
-                    <div>
-                        <div class="settings-label" style="color: var(--danger);">Clear All Data</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                            Delete all tasks permanently
-                        </div>
-                    </div>
-                    <span style="font-size: 1.25rem; color: var(--danger);">🗑️</span>
-                </div>
-            </div>
-            
-            <div class="settings-group">
-                <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>ℹ️</span> About
-                </h3>
-                <div class="profile-item">
-                    <span>Version</span>
-                    <strong>1.0.0</strong>
-                </div>
-                <div class="profile-item">
-                    <span>Developer</span>
-                    <strong>TaskMaster Team</strong>
-                </div>
-            </div>
-        </div>
-    `;
+    if(pendingPhotoDataURL===''){ // remove photo
+      newPhotoURL=null;
+    }else if(pendingPhotoDataURL){ // new photo (base64)
+      newPhotoURL=pendingPhotoDataURL;
+    }
+
+    // Firebase Auth only accepts http URLs for photoURL — base64 stored in Firestore only
+    const authPhotoURL=(newPhotoURL&&newPhotoURL.startsWith('http'))?newPhotoURL:null;
+    await fbUpdateProfile(u,{displayName:newName,photoURL:authPhotoURL});
+    await updateDoc(doc(db,'users',u.uid),{name:newName,photoURL:newPhotoURL||null});
+
+    S.user.name=newName;
+    S.user.photoURL=newPhotoURL||null;
+    pendingPhotoDataURL=null;
+
+    syncAllAvatars(S.user.photoURL,newName);
+    $('userName').textContent=newName;
+    $('profileName').textContent=newName;
+
+    showAlert('editProfileAlert','Profile updated!','success');
+    setTimeout(closeEditProfile,1500);
+  }catch(e){showAlert('editProfileAlert',e.message);}
+  hideLoading();
 }
 
-window.toggleTheme = function () {
-    const settings = JSON.parse(localStorage.getItem('taskmaster_settings') || '{}');
-    const newTheme = settings.theme === 'dark' ? 'light' : 'dark';
-    settings.theme = newTheme;
-    localStorage.setItem('taskmaster_settings', JSON.stringify(settings));
+function toggleSidebar(){$('sidebar').classList.toggle('active');$('sidebarOverlay').classList.toggle('active');}
 
-    document.body.setAttribute('data-theme', newTheme);
-    updateSettings();
+const pageTitles={homePage:'Tasks',statsPage:'Statistics',calendarPage:'Calendar',categoriesPage:'Categories',settingsPage:'Settings',profilePage:'Profile'};
+
+function goTo(pageId){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  $(pageId)?.classList.add('active');
+  document.querySelectorAll('.nav-item,.bnav-btn').forEach(el=>el.classList.toggle('active',el.dataset.page===pageId));
+  if($('sidebar').classList.contains('active'))toggleSidebar();
+  $('hdrTitle').textContent=pageTitles[pageId]||'Tasks';
+  if(pageId==='profilePage')updateProfilePage();
+  if(pageId==='statsPage')updateStatsPage();
+  if(pageId==='calendarPage')updateCalendar();
+  if(pageId==='categoriesPage')updateCategories();
+  if(pageId==='settingsPage')updateSettings();
+}
+
+function updateStatsPage(){
+  const total=S.tasks.length,done=S.tasks.filter(t=>t.completed).length,pending=total-done;
+  const rate=total>0?Math.round((done/total)*100):0;
+  const catStats=S.categories.map(cat=>{const ct=S.tasks.filter(t=>t.category===cat);return{name:cat,count:ct.length,done:ct.filter(t=>t.completed).length};});
+  const pri={high:S.tasks.filter(t=>t.priority==='high').length,medium:S.tasks.filter(t=>t.priority==='medium').length,low:S.tasks.filter(t=>t.priority==='low').length};
+  $('statsPage').innerHTML=`<div class="pg">
+    <div class="sec-card">
+      <h3 class="sec-card-title"><svg width="16" height="16"><use href="#ic-bar-chart"/></svg> Overall Progress</h3>
+      <div style="text-align:center;padding:1.5rem 0">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:3.2rem;font-weight:700;color:var(--accent)">${rate}%</div>
+        <p style="color:var(--t2);margin-top:.4rem;font-size:.82rem;letter-spacing:.06em;text-transform:uppercase">Completion Rate</p>
+      </div>
+      <div class="prog-bar"><div class="prog-fill" style="width:${rate}%"></div></div>
+      <div style="display:flex;justify-content:space-between;margin-top:.875rem;font-size:.78rem;color:var(--t2)">
+        <span>${done} Completed</span><span>${pending} Pending</span>
+      </div>
+    </div>
+    <div class="sec-card">
+      <h3 class="sec-card-title"><svg width="16" height="16"><use href="#ic-folder"/></svg> By Category</h3>
+      ${catStats.map(c=>`<div style="margin-bottom:.875rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:.4rem;font-size:.85rem">
+          <span style="font-weight:600">${c.name}</span>
+          <span style="color:var(--t2);font-family:'JetBrains Mono',monospace;font-size:.78rem">${c.done}/${c.count}</span>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" style="width:${c.count>0?(c.done/c.count)*100:0}%"></div></div>
+      </div>`).join('')}
+    </div>
+    <div class="sec-card">
+      <h3 class="sec-card-title"><svg width="16" height="16"><use href="#ic-alert"/></svg> By Priority</h3>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:.5rem">
+        <div style="text-align:center;padding:1.1rem .5rem;background:var(--raised);border-radius:12px;border:2px solid var(--rose)">
+          <div style="font-size:1.6rem;color:var(--rose);font-weight:800;font-family:'JetBrains Mono',monospace">${pri.high}</div>
+          <div style="font-size:.72rem;color:var(--t2);margin-top:.35rem;text-transform:uppercase;letter-spacing:.05em">High</div>
+        </div>
+        <div style="text-align:center;padding:1.1rem .5rem;background:var(--raised);border-radius:12px;border:2px solid var(--amber)">
+          <div style="font-size:1.6rem;color:var(--amber);font-weight:800;font-family:'JetBrains Mono',monospace">${pri.medium}</div>
+          <div style="font-size:.72rem;color:var(--t2);margin-top:.35rem;text-transform:uppercase;letter-spacing:.05em">Med</div>
+        </div>
+        <div style="text-align:center;padding:1.1rem .5rem;background:var(--raised);border-radius:12px;border:2px solid var(--jade)">
+          <div style="font-size:1.6rem;color:var(--jade);font-weight:800;font-family:'JetBrains Mono',monospace">${pri.low}</div>
+          <div style="font-size:.72rem;color:var(--t2);margin-top:.35rem;text-transform:uppercase;letter-spacing:.05em">Low</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function updateCalendar(){
+  const{calMonth:cm,calYear:cy}=S;
+  const firstDay=new Date(cy,cm,1).getDay(),daysInMonth=new Date(cy,cm+1,0).getDate();
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const days=['S','M','T','W','T','F','S'];
+  const today=new Date();
+  let html=`<div class="pg">
+    <div class="cal-nav">
+      <button class="ibtn" onclick="changeMonth(-1)"><svg width="16" height="16"><use href="#ic-chevron-right" style="transform:rotate(180deg)"/></svg></button>
+      <h2>${months[cm]} ${cy}</h2>
+      <button class="ibtn" onclick="changeMonth(1)"><svg width="16" height="16"><use href="#ic-chevron-right"/></svg></button>
+    </div>
+    <div class="cal-grid">
+      ${days.map(d=>`<div style="text-align:center;font-weight:700;color:var(--t2);padding:.4rem;font-size:.68rem;letter-spacing:.05em">${d}</div>`).join('')}`;
+  for(let i=0;i<firstDay;i++)html+='<div class="cal-day" style="opacity:.1"></div>';
+  for(let day=1;day<=daysInMonth;day++){
+    const ds=new Date(cy,cm,day).toDateString();
+    const isToday=ds===today.toDateString();
+    const dt=S.tasks.filter(t=>new Date(t.dueDate).toDateString()===ds);
+    html+=`<div class="cal-day ${isToday?'today':''} ${dt.length?'has-tasks':''}" onclick="showDayTasks(${cy},${cm},${day})">
+      <div>${day}</div>
+      ${dt.length?`<div style="position:absolute;bottom:2px;right:2px;font-size:.5rem;background:var(--accent);color:white;border-radius:50%;width:13px;height:13px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace">${dt.length}</div>`:''}
+    </div>`;
+  }
+  const selDay=cm===today.getMonth()&&cy===today.getFullYear()?today.getDate():1;
+  const selT=S.tasks.filter(t=>new Date(t.dueDate).toDateString()===new Date(cy,cm,selDay).toDateString());
+  html+=`</div>
+    <div class="sec-card" style="margin-top:.875rem">
+      <h3 class="sec-card-title" id="calDayTitle"><svg width="15" height="15"><use href="#ic-calendar"/></svg> ${cm===today.getMonth()&&cy===today.getFullYear()?"Today's Tasks":`${months[cm]} ${selDay}`}</h3>
+      <div id="calDayTasks">${renderDayTasks(selT)}</div>
+    </div>
+  </div>`;
+  $('calendarPage').innerHTML=html;
+}
+
+function renderDayTasks(tasks){
+  if(!tasks.length)return`<div class="empty"><svg width="32" height="32"><use href="#ic-calendar"/></svg><p>No tasks for this day</p></div>`;
+  return tasks.map(t=>`<div class="task-card priority-${t.priority}" style="margin-bottom:.6rem">
+    <div class="task-hdr">
+      <input type="checkbox" class="task-cb" ${t.completed?'checked':''} onchange="toggleTask('${t.id}')">
+      <div class="task-body">
+        <div class="task-title" style="${t.completed?'text-decoration:line-through;opacity:.4':''}">${esc(t.title)}</div>
+        <div class="task-meta">
+          <span class="badge badge-cat">${esc(t.category)}</span>
+          <span class="badge badge-${t.priority}">${t.priority}</span>
+          <span>${new Date(t.dueDate).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span>
+        </div>
+      </div>
+    </div>
+    <div class="task-actions">
+      <button class="t-btn t-btn-edit" onclick="editTask('${t.id}')"><svg width="12" height="12"><use href="#ic-edit"/></svg> Edit</button>
+      <button class="t-btn t-btn-del" onclick="deleteTask('${t.id}')"><svg width="12" height="12"><use href="#ic-trash"/></svg> Delete</button>
+    </div>
+  </div>`).join('');
+}
+
+window.changeMonth=(dir)=>{
+  S.calMonth+=dir;
+  if(S.calMonth>11){S.calMonth=0;S.calYear++;}
+  else if(S.calMonth<0){S.calMonth=11;S.calYear--;}
+  updateCalendar();
+};
+window.showDayTasks=(y,m,d)=>{
+  const sd=new Date(y,m,d);
+  const tasks=S.tasks.filter(t=>new Date(t.dueDate).toDateString()===sd.toDateString());
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const isToday=sd.toDateString()===new Date().toDateString();
+  $('calDayTitle').innerHTML=`<svg width="15" height="15"><use href="#ic-calendar"/></svg> ${isToday?"Today's Tasks":`${months[m]} ${d}, ${y}`}`;
+  $('calDayTasks').innerHTML=renderDayTasks(tasks);
 };
 
-window.toggleSetting = function (setting) {
-    const settings = JSON.parse(localStorage.getItem('taskmaster_settings') || '{}');
-    settings[setting] = !settings[setting];
-    localStorage.setItem('taskmaster_settings', JSON.stringify(settings));
-    updateSettings();
+function updateCategories(){
+  const icons={Personal:'📱',Work:'💼',Shopping:'🛒',Study:'📚'};
+  const data=S.categories.map(cat=>{const ct=S.tasks.filter(t=>t.category===cat);return{name:cat,icon:icons[cat]||'📁',total:ct.length,done:ct.filter(t=>t.completed).length};});
+  $('categoriesPage').innerHTML=`<div class="pg">
+    <div class="sec-card">
+      <h3 class="sec-card-title"><svg width="16" height="16"><use href="#ic-folder"/></svg> All Categories</h3>
+      ${data.map(c=>`<div class="cat-row" onclick="filterByCategory('${c.name}')">
+        <div class="cat-info">
+          <div style="font-size:1.5rem">${c.icon}</div>
+          <div>
+            <div style="font-weight:700;font-size:.875rem">${c.name}</div>
+            <div style="font-size:.75rem;color:var(--t2);margin-top:.2rem">${c.done} done · ${c.total-c.done} pending</div>
+          </div>
+        </div>
+        <div class="cat-count">${c.total}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+window.filterByCategory=(cat)=>{
+  goTo('homePage');
+  setTimeout(()=>{
+    S.filter='all';
+    document.querySelectorAll('.chip[data-filter]').forEach(c=>c.classList.remove('active'));
+    const filtered=S.tasks.filter(t=>t.category===cat);
+    $('tasksList').innerHTML=filtered.length?filtered.map(taskCardHTML).join(''):`<div class="empty"><svg width="36" height="36"><use href="#ic-folder"/></svg><h3>No ${cat} tasks</h3></div>`;
+  },100);
 };
 
-window.changePassword = function () {
-    alert('Change password feature - Coming soon!');
+function updateSettings(){
+  const cfg=JSON.parse(localStorage.getItem('tm_settings')||'{}');
+  const theme=cfg.theme||'dark',notifs=cfg.notifications!==false,sound=cfg.sound!==false;
+  $('settingsPage').innerHTML=`<div class="pg">
+    <div class="stg-grp">
+      <h3><svg width="15" height="15"><use href="#ic-sun"/></svg> Appearance</h3>
+      <div class="stg-item" onclick="toggleTheme()">
+        <div><div class="stg-lbl">Dark Mode</div><div class="stg-sub">Switch light / dark theme</div></div>
+        <div class="toggle ${theme==='dark'?'on':''}" id="themeToggle"><div class="toggle-dot"></div></div>
+      </div>
+    </div>
+    <div class="stg-grp">
+      <h3><svg width="15" height="15"><use href="#ic-bell"/></svg> Notifications</h3>
+      <div class="stg-item" onclick="toggleSetting('notifications')">
+        <div><div class="stg-lbl">Push Notifications</div><div class="stg-sub">Upcoming task alerts</div></div>
+        <div class="toggle ${notifs?'on':''}" id="notifsToggle"><div class="toggle-dot"></div></div>
+      </div>
+      <div class="stg-item" onclick="toggleSetting('sound')">
+        <div><div class="stg-lbl">Sound Effects</div><div class="stg-sub">Action sounds</div></div>
+        <div class="toggle ${sound?'on':''}" id="soundToggle"><div class="toggle-dot"></div></div>
+      </div>
+    </div>
+    <div class="stg-grp">
+      <h3><svg width="15" height="15"><use href="#ic-user"/></svg> Account</h3>
+      <div class="stg-item" onclick="openEditProfile()">
+        <div><div class="stg-lbl">Edit Profile</div><div class="stg-sub">Update name & info</div></div>
+        <svg width="16" height="16" style="color:var(--t2)"><use href="#ic-chevron-right"/></svg>
+      </div>
+      <div class="stg-item" onclick="handleChangePwd()">
+        <div><div class="stg-lbl">Change Password</div><div class="stg-sub">Send password reset email</div></div>
+        <svg width="16" height="16" style="color:var(--t2)"><use href="#ic-chevron-right"/></svg>
+      </div>
+    </div>
+    <div class="stg-grp">
+      <h3><svg width="15" height="15"><use href="#ic-download"/></svg> Data</h3>
+      <div class="stg-item" onclick="exportData()">
+        <div><div class="stg-lbl">Export Data</div><div class="stg-sub">Download tasks as JSON</div></div>
+        <svg width="16" height="16" style="color:var(--t2)"><use href="#ic-download"/></svg>
+      </div>
+      <div class="stg-item" onclick="clearAllData()">
+        <div><div class="stg-lbl" style="color:var(--rose)">Clear All Data</div><div class="stg-sub">Delete all tasks permanently</div></div>
+        <svg width="16" height="16" style="color:var(--rose)"><use href="#ic-trash"/></svg>
+      </div>
+    </div>
+    <div class="stg-grp">
+      <h3>About</h3>
+      <div class="pitem"><span>Version</span><strong>2.0.0</strong></div>
+      <div class="pitem"><span>Backend</span><strong>Firebase</strong></div>
+      <div class="pitem"><span>User ID</span><strong style="font-family:'JetBrains Mono',monospace;font-size:.7rem">${S.user?.uid?.slice(0,12)}…</strong></div>
+    </div>
+  </div>`;
+}
+
+window.toggleTheme=()=>{
+  const cfg=JSON.parse(localStorage.getItem('tm_settings')||'{}');
+  cfg.theme=cfg.theme==='dark'?'light':'dark';
+  localStorage.setItem('tm_settings',JSON.stringify(cfg));
+  document.body.setAttribute('data-theme',cfg.theme);
+  updateSettings();
+};
+window.toggleSetting=(k)=>{
+  const cfg=JSON.parse(localStorage.getItem('tm_settings')||'{}');
+  cfg[k]=!cfg[k];localStorage.setItem('tm_settings',JSON.stringify(cfg));updateSettings();
+};
+window.handleChangePwd=async()=>{
+  if(!confirm('Send password reset email to '+S.user.email+'?'))return;
+  try{await sendPasswordResetEmail(auth,S.user.email);alert('Password reset email sent!');}
+  catch(e){alert('Error: '+e.message);}
+};
+window.exportData=()=>{
+  const blob=new Blob([JSON.stringify(S.tasks,null,2)],{type:'application/json'});
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:'taskmaster-data.json'});
+  a.click();
+};
+window.clearAllData=async()=>{
+  if(!confirm('Delete ALL tasks? Cannot be undone!'))return;
+  if(!confirm('Are you absolutely sure?'))return;
+  showLoading();
+  try{
+    const q=query(collection(db,'tasks'),where('uid','==',S.user.uid));
+    const snap=await getDocs(q);
+    await Promise.all(snap.docs.map(d=>deleteDoc(d.ref)));
+    alert('All tasks deleted!');
+  }catch(e){alert('Error: '+e.message);}
+  hideLoading();
 };
 
-window.exportData = function () {
-    const dataStr = JSON.stringify(state.tasks, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'taskmaster-data.json';
-    link.click();
-};
+function setupTheme(){const cfg=JSON.parse(localStorage.getItem('tm_settings')||'{}');document.body.setAttribute('data-theme',cfg.theme||'dark');}
 
-window.clearData = function () {
-    if (confirm('Are you sure? This will delete all your tasks permanently!')) {
-        if (confirm('This action cannot be undone. Are you absolutely sure?')) {
-            state.tasks = [];
-            saveTasks();
-            renderTasks();
-            alert('All data has been cleared!');
-        }
-    }
-};
-
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    const now = new Date();
-
-    // Reset time to midnight for accurate date comparison
-    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    const diff = dateOnly - nowOnly;
-    const days = Math.round(diff / (1000 * 60 * 60 * 24));
-
-    if (days < 0) return '⚠️ Overdue';
-    if (days === 0) return '📅 Today';
-    if (days === 1) return '📅 Tomorrow';
-
-    return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+function setupEvents(){
+  setupPhotoInput();
+  $('loginBtn').addEventListener('click',handleLogin);
+  $('loginEmail').addEventListener('keydown',e=>e.key==='Enter'&&handleLogin());
+  $('loginPassword').addEventListener('keydown',e=>e.key==='Enter'&&handleLogin());
+  $('signupBtn').addEventListener('click',handleSignup);
+  $('googleLoginBtn').addEventListener('click',handleGoogleLogin);
+  $('googleSignupBtn').addEventListener('click',handleGoogleLogin);
+  $('sendResetOtpBtn').addEventListener('click',handleForgotPassword);
+  $('resendVerifyBtn').addEventListener('click',()=>showScreen('loginScreen'));
+  $('logoutBtn').addEventListener('click',handleLogout);
+  $('showSignup').addEventListener('click',e=>{e.preventDefault();showScreen('signupScreen');});
+  $('showLogin').addEventListener('click',e=>{e.preventDefault();showScreen('loginScreen');});
+  $('showLogin2').addEventListener('click',e=>{e.preventDefault();showScreen('loginScreen');});
+  $('showForgotPassword').addEventListener('click',e=>{e.preventDefault();showScreen('forgotPasswordScreen');});
+  $('backToLogin').addEventListener('click',e=>{e.preventDefault();showScreen('loginScreen');});
+  $('menuBtn').addEventListener('click',toggleSidebar);
+  $('sidebarOverlay').addEventListener('click',toggleSidebar);
+  document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>goTo(el.dataset.page)));
+  document.querySelectorAll('.bnav-btn').forEach(el=>el.addEventListener('click',()=>goTo(el.dataset.page)));
+  $('addTaskBtn').addEventListener('click',()=>openTaskModal());
+  $('saveTaskBtn').addEventListener('click',saveTask);
+  $('closeModal').addEventListener('click',closeTaskModal);
+  $('taskModal').addEventListener('click',e=>{if(e.target.id==='taskModal')closeTaskModal();});
+  $('notifBtn').addEventListener('click',()=>$('notifPanel').classList.toggle('active'));
+  $('closeNotifPanel').addEventListener('click',()=>$('notifPanel').classList.remove('active'));
+  $('searchBtn').addEventListener('click',openSearch);
+  $('searchInput').addEventListener('input',handleSearch);
+  $('searchModal').addEventListener('click',e=>{if(e.target.id==='searchModal')closeSearch();});
+  document.querySelectorAll('.chip[data-filter]').forEach(c=>c.addEventListener('click',()=>{
+    S.filter=c.dataset.filter;
+    document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.toggle('active',x===c));
+    renderTasks();
+  }));
+  $('sortSelect').addEventListener('change',e=>{S.sort=e.target.value;renderTasks();});
+  $('closeEditProfile').addEventListener('click',closeEditProfile);
+  $('saveProfileBtn').addEventListener('click',saveProfile);
+  $('editProfileModal').addEventListener('click',e=>{if(e.target.id==='editProfileModal')closeEditProfile();});
 }
