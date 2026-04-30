@@ -1,420 +1,997 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaskMaster - Mobile App</title>
-    <link rel="stylesheet" href="new.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>TaskMaster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+:root{
+  --ink:#0a0c14;
+  --ink2:#111420;
+  --surface:#161927;
+  --raised:#1c2133;
+  --line:rgba(255,255,255,0.07);
+  --line2:rgba(255,255,255,0.12);
+  --accent:#4f6ef7;
+  --accent2:#3451d1;
+  --accent-glow:rgba(79,110,247,0.28);
+  --accent-soft:rgba(79,110,247,0.1);
+  --amber:#f5a623;
+  --amber-soft:rgba(245,166,35,0.12);
+  --rose:#f05675;
+  --rose-soft:rgba(240,86,117,0.12);
+  --jade:#00c896;
+  --jade-soft:rgba(0,200,150,0.1);
+  --t1:#e8ecf8;
+  --t2:#5a6285;
+  --t3:#2e3450;
+  --r:16px;
+  --rs:10px;
+  font-size:16px;
+}
+
+[data-theme="light"]{
+  --ink:#f0f2fa;
+  --ink2:#ffffff;
+  --surface:#e8eaf4;
+  --raised:#dde0f0;
+  --line:rgba(0,0,0,0.07);
+  --line2:rgba(0,0,0,0.12);
+  --t1:#0d1020;
+  --t2:#5a6285;
+  --t3:#c0c5dd;
+}
+
+body{
+  font-family:'Outfit',sans-serif;
+  background:var(--ink);
+  color:var(--t1);
+  min-height:100vh;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  transition:background .3s,color .3s;
+}
+
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background:
+    radial-gradient(ellipse 70% 60% at -10% -10%,rgba(79,110,247,0.08) 0%,transparent 60%),
+    radial-gradient(ellipse 50% 50% at 110% 110%,rgba(0,200,150,0.05) 0%,transparent 60%);
+  pointer-events:none;z-index:0;
+}
+
+.hidden{display:none!important}
+
+/* ─── SVG ICONS ─── */
+.ic{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.ic svg{display:block}
+
+/* ─── LOADING ─── */
+#loading{
+  display:none;position:fixed;inset:0;
+  background:rgba(10,12,20,0.85);z-index:9999;
+  align-items:center;justify-content:center;
+  backdrop-filter:blur(10px);
+}
+#loading.active{display:flex}
+.loader{
+  width:40px;height:40px;
+  border:2.5px solid rgba(79,110,247,0.15);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin .75s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ─── AUTH ─── */
+.auth-wrap{
+  min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:2rem 1.25rem;position:relative;z-index:1;
+}
+
+.brand{text-align:center;margin-bottom:2rem;animation:fadeDown .6s ease both}
+
+.brand-icon{
+  width:64px;height:64px;margin:0 auto 1rem;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-radius:20px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 32px var(--accent-glow);
+  animation:float 3.5s ease-in-out infinite;
+}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+.brand-name{
+  font-size:1.8rem;font-weight:800;letter-spacing:-.04em;
+  background:linear-gradient(135deg,#a5b4fc,var(--accent),var(--jade));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.brand-sub{color:var(--t2);font-size:.85rem;margin-top:.3rem;font-weight:400}
+
+.card{
+  width:100%;max-width:400px;
+  background:var(--surface);
+  border:1px solid var(--line2);
+  border-radius:24px;
+  padding:2rem;
+  box-shadow:0 24px 64px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,0.03);
+  animation:fadeUp .5s ease .1s both;
+}
+
+.card-title{font-size:1.3rem;font-weight:700;letter-spacing:-.03em;margin-bottom:1.5rem}
+
+.fg{margin-bottom:1.1rem}
+.lbl{
+  display:block;margin-bottom:.5rem;
+  font-size:.72rem;font-weight:600;
+  color:var(--t2);text-transform:uppercase;letter-spacing:.1em;
+}
+.inp{
+  width:100%;padding:.8rem 1rem;
+  background:var(--raised);
+  border:1.5px solid var(--line2);
+  border-radius:var(--rs);
+  color:var(--t1);
+  font-family:'Outfit',sans-serif;font-size:.9rem;
+  transition:border .2s,box-shadow .2s;
+}
+.inp::placeholder{color:var(--t2);opacity:.6}
+.inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.inp:disabled{opacity:.4;cursor:not-allowed}
+
+.btn{
+  width:100%;padding:.875rem 1rem;
+  border:none;border-radius:var(--rs);
+  font-family:'Outfit',sans-serif;font-size:.9rem;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  gap:.5rem;transition:all .2s;
+}
+.btn-primary{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:white;box-shadow:0 4px 20px var(--accent-glow);
+}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 28px var(--accent-glow)}
+.btn-primary:active{transform:scale(.98)}
+.btn-ghost{
+  background:var(--raised);color:var(--t1);
+  border:1.5px solid var(--line2);margin-top:.75rem;
+}
+.btn-ghost:hover{border-color:var(--accent);background:var(--accent-soft)}
+
+.auth-footer{text-align:center;margin-top:1.25rem;color:var(--t2);font-size:.875rem}
+.auth-footer a{color:var(--accent);font-weight:600;text-decoration:none}
+.auth-footer a:hover{text-decoration:underline}
+
+.forgot{text-align:right;margin:.2rem 0 .8rem}
+.forgot a{color:var(--accent);font-size:.8rem;font-weight:600;text-decoration:none}
+
+.alert{
+  padding:.75rem 1rem;border-radius:var(--rs);
+  margin-bottom:1rem;font-size:.85rem;font-weight:500;
+  animation:fadeDown .3s ease;
+}
+.alert-error{background:var(--rose-soft);color:var(--rose);border:1px solid rgba(240,86,117,.25)}
+.alert-success{background:var(--jade-soft);color:var(--jade);border:1px solid rgba(0,200,150,.25)}
+.alert-info{background:var(--accent-soft);color:var(--accent);border:1px solid rgba(79,110,247,.25)}
+
+/* ─── APP ─── */
+.app{display:none;min-height:100vh;padding-bottom:72px;position:relative;z-index:1}
+.app.active{display:block}
+
+/* HEADER */
+.hdr{
+  background:rgba(22,25,39,0.94);
+  border-bottom:1px solid var(--line);
+  padding:.75rem 1.1rem;
+  display:flex;justify-content:space-between;align-items:center;
+  position:sticky;top:0;z-index:200;
+  backdrop-filter:blur(20px);
+}
+[data-theme="light"] .hdr{background:rgba(255,255,255,.94)}
+
+.hdr-left{display:flex;align-items:center;gap:.75rem}
+.hdr-title{font-size:1rem;font-weight:700;letter-spacing:-.02em}
+.hdr-right{display:flex;gap:.5rem}
+
+.ibtn{
+  background:var(--raised);border:1px solid var(--line2);
+  color:var(--t2);width:36px;height:36px;
+  border-radius:10px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;position:relative;
+}
+.ibtn:hover{background:var(--accent);border-color:var(--accent);color:white}
+.ibtn:hover svg path,.ibtn:hover svg rect,.ibtn:hover svg circle,.ibtn:hover svg line,.ibtn:hover svg polyline{stroke:white}
+
+.nbadge{
+  position:absolute;top:-4px;right:-4px;
+  background:var(--rose);color:white;
+  border-radius:50%;width:16px;height:16px;
+  display:none;align-items:center;justify-content:center;
+  font-size:.58rem;font-weight:700;
+  border:2px solid var(--ink);
+}
+
+/* SIDEBAR */
+.sb-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:290;display:none;backdrop-filter:blur(4px)}
+.sb-overlay.active{display:block}
+.sidebar{
+  position:fixed;top:0;left:-100%;
+  width:78%;max-width:270px;height:100vh;
+  background:var(--ink2);border-right:1px solid var(--line2);
+  z-index:300;transition:left .3s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;
+}
+.sidebar.active{left:0}
+
+.sb-head{
+  padding:1.5rem 1.25rem;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  position:relative;overflow:hidden;
+}
+.sb-head::after{
+  content:'';position:absolute;bottom:-40px;right:-30px;
+  width:120px;height:120px;border-radius:50%;
+  background:rgba(255,255,255,0.05);
+}
+.sb-avatar{
+  width:50px;height:50px;border-radius:50%;
+  background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.2rem;font-weight:800;color:white;
+  margin-bottom:.75rem;cursor:pointer;overflow:hidden;
+}
+.sb-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.sb-name{font-weight:700;color:white;font-size:.95rem}
+.sb-email{font-size:.75rem;color:rgba(255,255,255,.7);margin-top:.15rem}
+
+.sb-nav{padding:1rem .75rem;flex:1;overflow-y:auto}
+.nav-item{
+  display:flex;align-items:center;gap:.875rem;
+  padding:.75rem 1rem;border-radius:12px;cursor:pointer;
+  color:var(--t2);font-weight:500;font-size:.875rem;
+  transition:all .2s;margin-bottom:.2rem;
+}
+.nav-item:hover{background:var(--raised);color:var(--t1)}
+.nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav-item.active svg path,.nav-item.active svg rect,.nav-item.active svg circle,.nav-item.active svg line,.nav-item.active svg polyline{stroke:var(--accent)}
+
+.sb-foot{padding:1rem .75rem 1.5rem;border-top:1px solid var(--line)}
+
+/* NOTIF PANEL */
+.notif-panel{
+  position:fixed;top:54px;right:.75rem;
+  width:295px;max-height:70vh;
+  background:var(--ink2);border:1px solid var(--line2);
+  border-radius:20px;z-index:400;
+  box-shadow:0 20px 60px rgba(0,0,0,.4);
+  display:none;flex-direction:column;overflow:hidden;
+}
+.notif-panel.active{display:flex;animation:fadeDown .25s ease}
+.notif-hdr{
+  padding:.875rem 1.1rem;border-bottom:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;
+  font-weight:700;font-size:.875rem;
+}
+.notif-list{overflow-y:auto;flex:1}
+.notif-item{padding:.75rem 1.1rem;border-bottom:1px solid var(--line);font-size:.82rem}
+.notif-item.warn{border-left:3px solid var(--amber)}
+.notif-item.danger{border-left:3px solid var(--rose)}
+
+/* PAGES */
+.page{display:none;min-height:calc(100vh - 130px)}
+.page.active{display:block;animation:fadeIn .3s ease}
+
+/* HOME */
+.home{padding:1.1rem}
+
+.greeting{margin-bottom:1.25rem}
+.greeting-time{font-size:.78rem;color:var(--t2);font-weight:500;margin-bottom:.25rem;letter-spacing:.05em;text-transform:uppercase}
+.greeting-name{font-size:1.55rem;font-weight:800;letter-spacing:-.04em}
+.greeting-name span{color:var(--accent)}
+
+/* STAT CARDS */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:1.25rem}
+.stat-card{
+  background:var(--surface);border:1px solid var(--line2);
+  border-radius:14px;padding:.875rem .5rem;
+  text-align:center;transition:transform .2s;
+}
+.stat-card:hover{transform:translateY(-2px)}
+.stat-num{
+  font-family:'JetBrains Mono',monospace;
+  font-size:1.55rem;font-weight:700;line-height:1;
+}
+.stat-lbl{font-size:.62rem;color:var(--t2);margin-top:.3rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+
+/* ADD BTN */
+.add-task-btn{
+  width:100%;padding:.875rem;margin-bottom:1.25rem;
+  border:1.5px dashed rgba(79,110,247,.3);
+  background:rgba(79,110,247,.04);
+  border-radius:14px;color:var(--accent);
+  font-family:'Outfit',sans-serif;font-size:.875rem;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:.6rem;
+  transition:all .2s;
+}
+.add-task-btn:hover{border-color:var(--accent);background:var(--accent-soft)}
+
+/* FILTERS */
+.filter-row{display:flex;gap:.5rem;overflow-x:auto;margin-bottom:1rem;padding-bottom:.25rem;scrollbar-width:none}
+.filter-row::-webkit-scrollbar{display:none}
+.chip{
+  padding:.4rem .875rem;border-radius:100px;white-space:nowrap;
+  font-size:.78rem;font-weight:600;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line2);
+  color:var(--t2);transition:all .2s;flex-shrink:0;
+  display:flex;align-items:center;gap:.4rem;
+}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.active{background:var(--accent);color:white;border-color:var(--accent)}
+
+.sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:.875rem}
+.sec-title{font-size:.9rem;font-weight:700;letter-spacing:-.01em}
+.sort-sel{
+  background:var(--surface);border:1px solid var(--line2);
+  border-radius:8px;padding:.3rem .65rem;
+  color:var(--t1);font-family:'Outfit',sans-serif;font-size:.78rem;cursor:pointer;
+}
+
+/* TASK CARDS */
+.task-card{
+  background:var(--surface);border:1px solid var(--line2);
+  border-radius:14px;padding:.875rem;margin-bottom:.6rem;
+  transition:all .2s;border-left:3px solid transparent;
+  position:relative;
+}
+.task-card:hover{transform:translateX(2px);box-shadow:0 4px 24px rgba(0,0,0,.2)}
+.task-card.priority-high{border-left-color:var(--rose)}
+.task-card.priority-medium{border-left-color:var(--amber)}
+.task-card.priority-low{border-left-color:var(--jade)}
+
+.task-hdr{display:flex;gap:.875rem;align-items:flex-start}
+.task-cb{
+  width:19px;height:19px;border-radius:6px;
+  border:2px solid var(--line2);background:transparent;
+  cursor:pointer;flex-shrink:0;margin-top:2px;
+  appearance:none;-webkit-appearance:none;transition:all .2s;
+}
+.task-cb:checked{background:var(--accent);border-color:var(--accent)}
+.task-cb:checked::after{content:'✓';display:block;color:white;font-size:.65rem;text-align:center;line-height:1.3}
+
+.task-body{flex:1;min-width:0}
+.task-title{font-weight:600;font-size:.875rem;margin-bottom:.4rem;line-height:1.4}
+.task-meta{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;font-size:.72rem;color:var(--t2)}
+
+.badge{padding:.18rem .55rem;border-radius:100px;font-size:.68rem;font-weight:600}
+.badge-cat{background:var(--accent-soft);color:var(--accent)}
+.badge-high{background:var(--rose-soft);color:var(--rose)}
+.badge-medium{background:var(--amber-soft);color:var(--amber)}
+.badge-low{background:var(--jade-soft);color:var(--jade)}
+
+.task-actions{
+  display:flex;gap:.5rem;margin-top:.75rem;
+  padding-top:.75rem;border-top:1px solid var(--line);
+}
+.t-btn{
+  padding:.35rem .875rem;border:1px solid var(--line2);
+  border-radius:8px;font-family:'Outfit',sans-serif;
+  font-size:.75rem;font-weight:600;cursor:pointer;
+  background:transparent;color:var(--t2);transition:all .2s;
+  display:flex;align-items:center;gap:.35rem;
+}
+.t-btn-edit:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.t-btn-del:hover{background:var(--rose-soft);border-color:var(--rose);color:var(--rose)}
+
+.empty{text-align:center;padding:3rem 1rem;color:var(--t2)}
+.empty svg{opacity:.25;margin-bottom:.75rem}
+.empty h3{font-size:.9rem;font-weight:700;color:var(--t1);margin-bottom:.4rem}
+.empty p{font-size:.82rem}
+
+/* BOTTOM NAV */
+.bnav{
+  position:fixed;bottom:0;left:0;right:0;
+  background:rgba(22,25,39,.97);border-top:1px solid var(--line);
+  display:flex;padding:.35rem 0 .75rem;
+  z-index:200;backdrop-filter:blur(20px);
+}
+[data-theme="light"] .bnav{background:rgba(255,255,255,.97)}
+
+.bnav-btn{
+  flex:1;background:none;border:none;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:.25rem;
+  padding:.4rem;color:var(--t2);font-family:'Outfit',sans-serif;
+  position:relative;transition:color .2s;
+}
+.bnav-btn.active{color:var(--accent)}
+.bnav-btn.active svg path,.bnav-btn.active svg rect,.bnav-btn.active svg circle{stroke:var(--accent)}
+.bnav-ico{transition:transform .2s}
+.bnav-btn.active .bnav-ico{transform:scale(1.12)}
+.bnav-lbl{font-size:.62rem;font-weight:600;letter-spacing:.03em}
+.bnav-btn.active::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:1.6rem;height:2px;background:var(--accent);border-radius:0 0 4px 4px;
+}
+
+/* MODALS */
+.modal{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.75);z-index:2000;
+  align-items:flex-end;backdrop-filter:blur(8px);
+}
+.modal.active{display:flex;animation:fadeIn .2s ease}
+.modal-box{
+  background:var(--ink2);border:1px solid var(--line2);
+  border-radius:24px 24px 0 0;padding:1.75rem 1.5rem;
+  width:100%;max-height:92vh;overflow-y:auto;
+  animation:slideUp .3s cubic-bezier(.34,1.56,.64,1);
+}
+.modal-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem}
+.modal-title{font-size:1.05rem;font-weight:700;letter-spacing:-.02em}
+.close-btn{
+  background:var(--surface);border:1px solid var(--line2);color:var(--t2);
+  width:30px;height:30px;border-radius:50%;font-size:.75rem;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;
+}
+.close-btn:hover{background:var(--rose);border-color:var(--rose);color:white}
+
+/* SEARCH */
+.search-modal{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.85);z-index:2000;
+  backdrop-filter:blur(12px);flex-direction:column;
+}
+.search-modal.active{display:flex;animation:fadeIn .2s ease}
+.search-wrap{padding:1.1rem;background:var(--ink2);border-bottom:1px solid var(--line)}
+.search-inp{
+  width:100%;padding:.8rem 1rem;
+  background:var(--surface);border:1.5px solid var(--accent);
+  border-radius:var(--rs);color:var(--t1);
+  font-family:'Outfit',sans-serif;font-size:.95rem;
+  box-shadow:0 0 0 3px var(--accent-glow);
+}
+.search-inp:focus{outline:none}
+.search-res{padding:1rem;overflow-y:auto;flex:1}
+
+/* PROFILE */
+.profile-pg{padding:1rem}
+.profile-hdr{
+  text-align:center;padding:2rem 1.5rem;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-radius:20px;margin-bottom:1rem;color:white;
+  position:relative;overflow:hidden;
+}
+.profile-hdr::before{
+  content:'';position:absolute;top:-50%;right:-20%;
+  width:150px;height:150px;border-radius:50%;
+  background:rgba(255,255,255,0.06);
+}
+.profile-av-lg{
+  width:72px;height:72px;border-radius:50%;
+  background:rgba(255,255,255,.2);border:3px solid rgba(255,255,255,.5);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.8rem;font-weight:800;margin:0 auto .875rem;
+  cursor:pointer;overflow:hidden;transition:transform .25s;
+}
+.profile-av-lg:hover{transform:scale(1.05)}
+.profile-av-lg img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.profile-hdr h2{font-size:1.15rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.2rem}
+.ep-btn{
+  background:rgba(255,255,255,.2);color:white;
+  border:1.5px solid rgba(255,255,255,.35);
+  padding:.4rem 1rem;border-radius:100px;
+  font-size:.75rem;font-weight:600;cursor:pointer;
+  margin-top:.875rem;transition:all .2s;
+}
+.ep-btn:hover{background:rgba(255,255,255,.3)}
+
+.psec{
+  background:var(--surface);border:1px solid var(--line2);
+  border-radius:16px;padding:1.1rem;margin-bottom:1rem;
+}
+.psec h3{font-size:.875rem;font-weight:700;margin-bottom:.875rem;display:flex;align-items:center;gap:.5rem}
+.pitem{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.55rem 0;border-bottom:1px solid var(--line);
+  font-size:.85rem;color:var(--t2);
+}
+.pitem:last-child{border-bottom:none}
+.pitem strong{color:var(--t1);font-weight:700}
+
+/* STATS/SETTINGS/CAL pages */
+.pg{padding:1rem}
+.sec-card{background:var(--surface);border:1px solid var(--line2);border-radius:16px;padding:1.1rem;margin-bottom:1rem}
+.sec-card-title{font-size:.875rem;font-weight:700;margin-bottom:1rem;letter-spacing:-.01em;display:flex;align-items:center;gap:.5rem}
+.prog-bar{width:100%;height:5px;background:var(--raised);border-radius:100px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--jade));transition:width .6s ease;border-radius:100px}
+
+.cat-row{
+  background:var(--raised);border:1px solid var(--line);
+  border-radius:12px;padding:.75rem 1rem;margin-bottom:.6rem;
+  display:flex;justify-content:space-between;align-items:center;
+  cursor:pointer;transition:all .2s;
+}
+.cat-row:hover{transform:translateX(3px);border-color:var(--accent)}
+.cat-info{display:flex;align-items:center;gap:.875rem}
+.cat-count{
+  background:var(--accent);color:white;
+  padding:.25rem .75rem;border-radius:100px;
+  font-weight:700;font-size:.78rem;
+  font-family:'JetBrains Mono',monospace;
+}
+
+/* SETTINGS */
+.stg-grp{background:var(--surface);border:1px solid var(--line2);border-radius:16px;padding:1.1rem;margin-bottom:1rem}
+.stg-grp h3{font-size:.875rem;font-weight:700;margin-bottom:.875rem;display:flex;align-items:center;gap:.5rem}
+
+/* PHOTO UPLOAD */
+.av-upload-wrap{
+  display:flex;flex-direction:column;align-items:center;
+  margin-bottom:1.5rem;gap:.75rem;
+}
+.av-upload-ring{
+  position:relative;width:84px;height:84px;cursor:pointer;
+}
+.av-upload-preview{
+  width:84px;height:84px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border:3px solid var(--line2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.8rem;font-weight:800;color:white;
+  overflow:hidden;transition:filter .2s;
+  font-family:'Outfit',sans-serif;
+}
+.av-upload-preview img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.av-upload-ring:hover .av-upload-preview{filter:brightness(.7)}
+.av-cam-overlay{
+  position:absolute;inset:0;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .2s;
+  background:rgba(0,0,0,.4);
+}
+.av-upload-ring:hover .av-cam-overlay{opacity:1}
+.av-upload-hint{font-size:.78rem;color:var(--t2);font-weight:500}
+.av-remove-btn{
+  font-size:.75rem;color:var(--rose);font-weight:600;
+  background:none;border:none;cursor:pointer;
+  padding:.25rem .6rem;border-radius:6px;
+  transition:background .2s;
+}
+.av-remove-btn:hover{background:var(--rose-soft)}
+.stg-item{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.65rem .5rem;cursor:pointer;border-radius:10px;transition:all .2s;
+}
+.stg-item:hover{background:var(--raised);padding-left:.75rem}
+.stg-lbl{font-size:.85rem;font-weight:600;margin-bottom:.15rem}
+.stg-sub{font-size:.78rem;color:var(--t2)}
+
+.toggle{
+  position:relative;width:44px;height:23px;
+  background:var(--raised);border:1.5px solid var(--line2);
+  border-radius:100px;cursor:pointer;transition:all .3s;flex-shrink:0;
+}
+.toggle.on{background:var(--accent);border-color:var(--accent)}
+.toggle-dot{
+  position:absolute;top:2px;left:2px;
+  width:15px;height:15px;background:white;border-radius:50%;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1);
+  box-shadow:0 1px 4px rgba(0,0,0,.25);
+}
+.toggle.on .toggle-dot{transform:translateX(21px)}
+
+/* CALENDAR */
+.cal-nav{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:1rem;padding:.875rem 1.1rem;
+  background:var(--surface);border:1px solid var(--line2);border-radius:14px;
+}
+.cal-nav h2{font-size:.9rem;font-weight:700;letter-spacing:-.01em}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.3rem;margin-bottom:.5rem}
+.cal-day{
+  aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  background:var(--surface);border-radius:9px;
+  font-size:.75rem;font-weight:500;cursor:pointer;
+  position:relative;border:1px solid transparent;transition:all .2s;
+}
+.cal-day:hover{border-color:var(--accent);color:var(--accent);transform:scale(1.07)}
+.cal-day.today{background:var(--accent);color:white;font-weight:800;box-shadow:0 2px 12px var(--accent-glow)}
+.cal-day.has-tasks::after{content:'';position:absolute;bottom:3px;width:4px;height:4px;background:var(--jade);border-radius:50%}
+
+/* ANIMATIONS */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+
+@media(max-width:360px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
 </head>
-
 <body>
-    <div class="loading" id="loading">
-        <div class="spinner"></div>
+
+<div id="loading"><div class="loader"></div></div>
+
+<!-- ── SVG ICON DEFS ── -->
+<svg style="display:none">
+  <symbol id="ic-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="ic-task" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></symbol>
+  <symbol id="ic-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></symbol>
+  <symbol id="ic-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
+  <symbol id="ic-bar-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+  <symbol id="ic-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></symbol>
+  <symbol id="ic-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="ic-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
+  <symbol id="ic-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="ic-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></symbol>
+  <symbol id="ic-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="ic-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></symbol>
+  <symbol id="ic-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></symbol>
+  <symbol id="ic-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+  <symbol id="ic-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/><polyline points="22 6 12 13 2 6"/></symbol>
+  <symbol id="ic-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></symbol>
+  <symbol id="ic-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></symbol>
+  <symbol id="ic-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="ic-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="ic-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="ic-google" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></symbol>
+</svg>
+
+<!-- ── LOGIN ── -->
+<div class="auth-wrap" id="loginScreen">
+  <div class="brand">
+    <div class="brand-icon"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-task"/></svg></div>
+    <div class="brand-name">TaskMaster</div>
+    <div class="brand-sub">Organize your life, one task at a time</div>
+  </div>
+  <div class="card">
+    <h2 class="card-title">Welcome back</h2>
+    <div id="loginAlert"></div>
+    <div class="fg"><label class="lbl">Email</label><input type="email" class="inp" id="loginEmail" placeholder="you@example.com"></div>
+    <div class="fg"><label class="lbl">Password</label><input type="password" class="inp" id="loginPassword" placeholder="Enter your password"></div>
+    <div class="forgot"><a href="#" id="showForgotPassword">Forgot password?</a></div>
+    <button class="btn btn-primary" id="loginBtn">
+      <svg width="16" height="16"><use href="#ic-check"/></svg> Sign In
+    </button>
+    <button class="btn btn-ghost" id="googleLoginBtn">
+      <svg width="18" height="18"><use href="#ic-google"/></svg> Continue with Google
+    </button>
+    <div class="auth-footer">No account? <a href="#" id="showSignup">Sign Up</a></div>
+  </div>
+</div>
+
+<!-- ── SIGNUP ── -->
+<div class="auth-wrap hidden" id="signupScreen">
+  <div class="brand">
+    <div class="brand-icon"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><use href="#ic-plus"/></svg></div>
+    <div class="brand-name">TaskMaster</div>
+    <div class="brand-sub">Start your productivity journey</div>
+  </div>
+  <div class="card">
+    <h2 class="card-title">Create Account</h2>
+    <div id="signupAlert"></div>
+    <div class="fg"><label class="lbl">Full Name</label><input type="text" class="inp" id="signupName" placeholder="Your name"></div>
+    <div class="fg"><label class="lbl">Email</label><input type="email" class="inp" id="signupEmail" placeholder="you@example.com"></div>
+    <div class="fg"><label class="lbl">Password</label><input type="password" class="inp" id="signupPassword" placeholder="Min 6 characters"></div>
+    <button class="btn btn-primary" id="signupBtn">Create Account</button>
+    <button class="btn btn-ghost" id="googleSignupBtn">
+      <svg width="18" height="18"><use href="#ic-google"/></svg> Continue with Google
+    </button>
+    <div class="auth-footer">Already have an account? <a href="#" id="showLogin">Sign In</a></div>
+  </div>
+</div>
+
+<!-- ── EMAIL SENT ── -->
+<div class="auth-wrap hidden" id="emailSentScreen">
+  <div class="brand">
+    <div class="brand-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><use href="#ic-mail"/></svg></div>
+    <div class="brand-name">Check Your Email</div>
+    <div class="brand-sub">One more step to go</div>
+  </div>
+  <div class="card">
+    <h2 class="card-title">Verify Your Email</h2>
+    <p style="color:var(--t2);font-size:.875rem;margin-bottom:1.5rem;line-height:1.7">
+      We sent a verification link to<br>
+      <strong id="sentEmailAddress" style="color:var(--t1)">your@email.com</strong><br><br>
+      Click the link, then come back and sign in.
+    </p>
+    <button class="btn btn-primary" id="resendVerifyBtn">Resend Email</button>
+    <div class="auth-footer" style="margin-top:1rem">Already verified? <a href="#" id="showLogin2">Sign In</a></div>
+  </div>
+</div>
+
+<!-- ── FORGOT PASSWORD ── -->
+<div class="auth-wrap hidden" id="forgotPasswordScreen">
+  <div class="brand">
+    <div class="brand-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><use href="#ic-key"/></svg></div>
+    <div class="brand-name">Reset Password</div>
+    <div class="brand-sub">We'll send a reset link to your email</div>
+  </div>
+  <div class="card">
+    <h2 class="card-title">Forgot Password?</h2>
+    <div id="forgotAlert"></div>
+    <div class="fg"><label class="lbl">Email</label><input type="email" class="inp" id="forgotEmail" placeholder="your@email.com"></div>
+    <button class="btn btn-primary" id="sendResetOtpBtn">Send Reset Email</button>
+    <div class="auth-footer">Remember it? <a href="#" id="backToLogin">Sign In</a></div>
+  </div>
+</div>
+
+<!-- ── APP ── -->
+<div class="app" id="appContainer">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="hdr-left">
+      <button class="ibtn" id="menuBtn"><svg width="18" height="18" style="color:var(--t2)"><use href="#ic-menu"/></svg></button>
+      <div class="hdr-title" id="hdrTitle">Tasks</div>
     </div>
-
-    <!-- Login Screen -->
-    <div class="auth-screen" id="loginScreen">
-        <div class="auth-logo">
-            <div class="logo-icon">✨</div>
-            <div class="logo-text">TaskMaster</div>
-            <div class="logo-tagline">Organize your life, one task at a time</div>
-        </div>
-        <div class="auth-form">
-            <h2 class="form-title">Welcome Back!</h2>
-            <div id="loginAlert"></div>
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-input" id="loginEmail" placeholder="Enter your email">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" class="form-input" id="loginPassword" placeholder="Enter your password">
-            </div>
-            <div class="forgot-password">
-                <a href="#" id="showForgotPassword">Forgot Password?</a>
-            </div>
-            <button class="btn btn-primary" id="loginBtn"><span>🔐</span><span>Sign In</span></button>
-            <div class="auth-link">Don't have an account? <a href="#" id="showSignup">Sign Up</a></div>
-        </div>
+    <div class="hdr-right">
+      <button class="ibtn" id="searchBtn"><svg width="17" height="17" style="color:var(--t2)"><use href="#ic-search"/></svg></button>
+      <button class="ibtn" id="notifBtn">
+        <svg width="17" height="17" style="color:var(--t2)"><use href="#ic-bell"/></svg>
+        <span class="nbadge" id="notifBadge">0</span>
+      </button>
     </div>
+  </div>
 
-    <!-- Signup Screen -->
-    <div class="auth-screen hidden" id="signupScreen">
-        <div class="auth-logo">
-            <div class="logo-icon">✨</div>
-            <div class="logo-text">TaskMaster</div>
-            <div class="logo-tagline">Start your productivity journey</div>
-        </div>
-        <div class="auth-form">
-            <h2 class="form-title">Create Account</h2>
-            <div id="signupAlert"></div>
-            <div class="form-group">
-                <label class="form-label">Full Name</label>
-                <input type="text" class="form-input" id="signupName" placeholder="Enter your name">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-input" id="signupEmail" placeholder="Enter your email">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" class="form-input" id="signupPassword" placeholder="Create a password">
-            </div>
-            <button class="btn btn-primary" id="signupBtn"><span>🚀</span><span>Create Account</span></button>
-            <div class="auth-link">Already have an account? <a href="#" id="showLogin">Sign In</a></div>
-        </div>
+  <!-- Sidebar -->
+  <div class="sb-overlay" id="sidebarOverlay"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sb-head">
+      <div class="sb-avatar" id="userAvatar" onclick="openEditProfile()">U</div>
+      <div class="sb-name" id="userName">User</div>
+      <div class="sb-email" id="userEmail">user@email.com</div>
     </div>
-
-    <!-- OTP Verification Screen -->
-    <div class="auth-screen hidden" id="otpScreen">
-        <div class="auth-logo">
-            <div class="logo-icon">📧</div>
-            <div class="logo-text">Verify Email</div>
-            <div class="logo-tagline">Enter the OTP sent to your email</div>
-        </div>
-        <div class="auth-form">
-            <h2 class="form-title">Enter OTP</h2>
-            <div id="otpAlert"></div>
-            <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                We sent a 6-digit code to<br>
-                <strong id="otpEmail">your@email.com</strong>
-            </p>
-            <div class="otp-container">
-                <input type="text" class="otp-input" maxlength="1" id="otp1">
-                <input type="text" class="otp-input" maxlength="1" id="otp2">
-                <input type="text" class="otp-input" maxlength="1" id="otp3">
-                <input type="text" class="otp-input" maxlength="1" id="otp4">
-                <input type="text" class="otp-input" maxlength="1" id="otp5">
-                <input type="text" class="otp-input" maxlength="1" id="otp6">
-            </div>
-            <button class="btn btn-primary" id="verifyOtpBtn"><span>✅</span><span>Verify OTP</span></button>
-            <div class="resend-otp">
-                Didn't receive code? <button id="resendOtpBtn">Resend OTP</button>
-                <span id="otpTimer"></span>
-            </div>
-        </div>
+    <nav class="sb-nav">
+      <div class="nav-item active" data-page="homePage">
+        <svg width="18" height="18" style="color:var(--t2)"><use href="#ic-task"/></svg><span>My Tasks</span>
+      </div>
+      <div class="nav-item" data-page="categoriesPage">
+        <svg width="18" height="18" style="color:var(--t2)"><use href="#ic-folder"/></svg><span>Categories</span>
+      </div>
+      <div class="nav-item" data-page="calendarPage">
+        <svg width="18" height="18" style="color:var(--t2)"><use href="#ic-calendar"/></svg><span>Calendar</span>
+      </div>
+      <div class="nav-item" data-page="statsPage">
+        <svg width="18" height="18" style="color:var(--t2)"><use href="#ic-bar-chart"/></svg><span>Statistics</span>
+      </div>
+      <div class="nav-item" data-page="settingsPage">
+        <svg width="18" height="18" style="color:var(--t2)"><use href="#ic-settings"/></svg><span>Settings</span>
+      </div>
+    </nav>
+    <div class="sb-foot">
+      <button class="btn btn-primary" id="logoutBtn" style="font-size:.85rem;padding:.75rem">
+        <svg width="16" height="16"><use href="#ic-logout"/></svg> Logout
+      </button>
     </div>
+  </div>
 
-    <!-- Forgot Password Screen -->
-    <div class="auth-screen hidden" id="forgotPasswordScreen">
-        <div class="auth-logo">
-            <div class="logo-icon">🔑</div>
-            <div class="logo-text">Reset Password</div>
-            <div class="logo-tagline">We'll send you an OTP to reset</div>
-        </div>
-        <div class="auth-form">
-            <h2 class="form-title">Forgot Password?</h2>
-            <div id="forgotAlert"></div>
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-input" id="forgotEmail" placeholder="Enter your email">
-            </div>
-            <button class="btn btn-primary" id="sendResetOtpBtn"><span>📧</span><span>Send OTP</span></button>
-            <div class="auth-link">Remember password? <a href="#" id="backToLogin">Sign In</a></div>
-        </div>
+  <!-- Notification Panel -->
+  <div class="notif-panel" id="notifPanel">
+    <div class="notif-hdr">
+      <span>Notifications</span>
+      <button class="close-btn" id="closeNotifPanel">✕</button>
     </div>
-
-    <!-- Reset Password Screen -->
-    <div class="auth-screen hidden" id="resetPasswordScreen">
-        <div class="auth-logo">
-            <div class="logo-icon">🔐</div>
-            <div class="logo-text">New Password</div>
-            <div class="logo-tagline">Create a strong password</div>
-        </div>
-        <div class="auth-form">
-            <h2 class="form-title">Reset Password</h2>
-            <div id="resetAlert"></div>
-            <div class="form-group">
-                <label class="form-label">Enter OTP</label>
-                <input type="text" class="form-input" id="resetOtp" placeholder="Enter 6-digit OTP" maxlength="6">
-            </div>
-            <div class="form-group">
-                <label class="form-label">New Password</label>
-                <input type="password" class="form-input" id="newPassword" placeholder="Enter new password">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Confirm Password</label>
-                <input type="password" class="form-input" id="confirmPassword" placeholder="Confirm new password">
-            </div>
-            <button class="btn btn-primary" id="resetPasswordBtn"><span>🔐</span><span>Reset Password</span></button>
-        </div>
+    <div class="notif-list" id="notifList">
+      <div class="empty"><svg width="36" height="36" style="color:var(--t2)"><use href="#ic-bell"/></svg><p>No notifications</p></div>
     </div>
+  </div>
 
-    <!-- App Container -->
-    <div class="app-container" id="appContainer">
-        <!-- Header -->
-        <div class="mobile-header">
-            <div class="header-left">
-                <button class="menu-btn" id="menuBtn">☰</button>
-                <div class="header-title">Tasks</div>
-            </div>
-            <div class="header-right">
-                <button class="icon-btn" id="searchBtn">🔍</button>
-                <button class="icon-btn" id="notifBtn">🔔<span class="notification-badge"
-                        id="notifBadge">0</span></button>
-            </div>
+  <!-- HOME PAGE -->
+  <div class="page active" id="homePage">
+    <div class="home">
+      <div class="greeting">
+        <div class="greeting-time" id="greetingTime">Good morning</div>
+        <div class="greeting-name" id="greetingName">Welcome back! <span>👋</span></div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--accent)" id="totalTasks">0</div>
+          <div class="stat-lbl">Total</div>
         </div>
-
-        <!-- Sidebar -->
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="user-info">
-                    <div class="user-avatar" id="userAvatar" onclick="openEditProfile()">U</div>
-                    <div class="user-details">
-                        <h3 id="userName">User</h3>
-                        <p id="userEmail">user@email.com</p>
-                    </div>
-                </div>
-            </div>
-            <nav class="sidebar-nav">
-                <div class="nav-item active" data-page="homePage"><span>📝</span><span>My Tasks</span></div>
-                <div class="nav-item" data-page="categoriesPage"><span>📁</span><span>Categories</span></div>
-                <div class="nav-item" data-page="calendarPage"><span>📅</span><span>Calendar</span></div>
-                <div class="nav-item" data-page="statsPage"><span>📊</span><span>Statistics</span></div>
-                <div class="nav-item" data-page="settingsPage"><span>⚙️</span><span>Settings</span></div>
-            </nav>
-            <div class="sidebar-footer">
-                <button class="btn btn-primary" id="logoutBtn"><span>🚪</span><span>Logout</span></button>
-            </div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--jade)" id="completedTasks">0</div>
+          <div class="stat-lbl">Done</div>
         </div>
-
-        <!-- Notification Panel -->
-        <div class="notification-panel" id="notificationPanel">
-            <div class="notification-header">
-                <h3>🔔 Notifications</h3>
-                <button class="close-btn" id="closeNotifPanel"
-                    style="background: white; color: var(--primary);">✕</button>
-            </div>
-            <div class="notification-list" id="notificationList">
-                <div class="empty-state">
-                    <div class="empty-icon">📭</div>
-                    <p>No notifications</p>
-                </div>
-            </div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--amber)" id="pendingTasks">0</div>
+          <div class="stat-lbl">Pending</div>
         </div>
-
-        <!-- Home Page (same as before) -->
-        <div class="page active" id="homePage">
-            <div class="stats-section">
-                <div class="stat-card">
-                    <div class="stat-number" style="color: var(--primary);" id="totalTasks">0</div>
-                    <div class="stat-label">Total</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" style="color: var(--secondary);" id="completedTasks">0</div>
-                    <div class="stat-label">Completed</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" style="color: var(--warning);" id="pendingTasks">0</div>
-                    <div class="stat-label">Pending</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" style="color: var(--danger);" id="overdueTasks">0</div>
-                    <div class="stat-label">Overdue</div>
-                </div>
-            </div>
-            <div class="quick-add">
-                <button class="add-task-btn" id="addTaskBtn"><span>➕</span><span>Add New Task</span></button>
-            </div>
-            <div class="tasks-section">
-                <div class="filter-chips">
-                    <div class="chip active" data-filter="all">📋 All</div>
-                    <div class="chip" data-filter="pending">⏳ Pending</div>
-                    <div class="chip" data-filter="completed">✅ Completed</div>
-                    <div class="chip" data-filter="high">🔴 High</div>
-                    <div class="chip" data-filter="today">📅 Today</div>
-                </div>
-                <div class="section-header">
-                    <div class="section-title">Tasks</div>
-                    <select class="chip" id="sortSelect" style="border: none; padding: 0.5rem;">
-                        <option value="date">Date</option>
-                        <option value="priority">Priority</option>
-                        <option value="category">Category</option>
-                    </select>
-                </div>
-                <div id="tasksList">
-                    <div class="empty-state">
-                        <div class="empty-icon">📝</div>
-                        <h3>No tasks yet</h3>
-                        <p>Tap the button above to add your first task</p>
-                    </div>
-                </div>
-            </div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--rose)" id="overdueTasks">0</div>
+          <div class="stat-lbl">Overdue</div>
         </div>
-
-        <!-- Other pages remain same... (Stats, Calendar, Categories, Settings) -->
-        <!-- Stats Page -->
-        <div class="page" id="statsPage">
-            <!-- Content will be dynamically generated -->
+      </div>
+      <button class="add-task-btn" id="addTaskBtn">
+        <svg width="16" height="16"><use href="#ic-plus"/></svg> Add New Task
+      </button>
+      <div class="filter-row">
+        <div class="chip active" data-filter="all">All</div>
+        <div class="chip" data-filter="pending">
+          <svg width="12" height="12"><use href="#ic-clock"/></svg> Pending
         </div>
-
-        <!-- Calendar Page -->
-        <div class="page" id="calendarPage">
-            <!-- Content will be dynamically generated -->
+        <div class="chip" data-filter="completed">
+          <svg width="12" height="12"><use href="#ic-check"/></svg> Done
         </div>
-
-        <!-- Categories Page -->
-        <div class="page" id="categoriesPage">
-            <!-- Content will be dynamically generated -->
+        <div class="chip" data-filter="high">
+          <svg width="12" height="12"><use href="#ic-alert"/></svg> High
         </div>
-
-        <!-- Settings Page -->
-        <div class="page" id="settingsPage">
-            <!-- Content will be dynamically generated -->
+        <div class="chip" data-filter="today">
+          <svg width="12" height="12"><use href="#ic-calendar"/></svg> Today
         </div>
-        <!-- I'll provide them in next response -->
-
-        <!-- Profile Page with Edit -->
-        <div class="page" id="profilePage">
-            <div class="profile-page">
-                <div class="profile-header">
-                    <div class="profile-avatar-large" id="profileAvatar" onclick="openEditProfile()">U</div>
-                    <h2 id="profileName">User Name</h2>
-                    <p style="color: rgba(255,255,255,0.9);" id="profileEmail">user@email.com</p>
-                    <button class="edit-profile-btn" onclick="openEditProfile()">✏️ Edit Profile</button>
-                </div>
-                <div class="profile-section">
-                    <h3 style="margin-bottom: 1rem;">📊 Your Activity</h3>
-                    <div class="profile-item"><span>Total Tasks Created</span><strong id="profileTotalTasks">0</strong>
-                    </div>
-                    <div class="profile-item"><span>Tasks Completed</span><strong id="profileCompletedTasks">0</strong>
-                    </div>
-                    <div class="profile-item"><span>Completion Rate</span><strong id="profileCompletionRate">0%</strong>
-                    </div>
-                    <div class="profile-item"><span>Member Since</span><strong id="profileMemberSince">Today</strong>
-                    </div>
-                </div>
-                <div class="profile-section">
-                    <h3 style="margin-bottom: 1rem;">🎯 Achievements</h3>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
-                        <div
-                            style="text-align: center; padding: 1rem; background: var(--bg-card); border-radius: 0.75rem;">
-                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌟</div>
-                            <div style="font-size: 0.875rem;">First Task</div>
-                        </div>
-                        <div
-                            style="text-align: center; padding: 1rem; background: var(--bg-card); border-radius: 0.75rem;">
-                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔥</div>
-                            <div style="font-size: 0.875rem;">10 Tasks</div>
-                        </div>
-                        <div
-                            style="text-align: center; padding: 1rem; background: var(--bg-card); border-radius: 0.75rem;">
-                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">💪</div>
-                            <div style="font-size: 0.875rem;">Productive</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+      </div>
+      <div class="sec-hdr">
+        <div class="sec-title">Tasks</div>
+        <select class="sort-sel" id="sortSelect">
+          <option value="date">By Date</option>
+          <option value="priority">By Priority</option>
+          <option value="category">By Category</option>
+        </select>
+      </div>
+      <div id="tasksList">
+        <div class="empty">
+          <svg width="40" height="40" style="color:var(--t2)"><use href="#ic-task"/></svg>
+          <h3>No tasks yet</h3><p>Tap the button above to add your first task</p>
         </div>
-
-        <!-- Bottom Navigation -->
-        <div class="bottom-nav">
-            <button class="nav-btn active" data-page="homePage"><span class="nav-btn-icon">🏠</span><span
-                    class="nav-btn-label">Home</span></button>
-            <button class="nav-btn" data-page="statsPage"><span class="nav-btn-icon">📊</span><span
-                    class="nav-btn-label">Stats</span></button>
-            <button class="nav-btn" data-page="calendarPage"><span class="nav-btn-icon">📅</span><span
-                    class="nav-btn-label">Calendar</span></button>
-            <button class="nav-btn" data-page="profilePage"><span class="nav-btn-icon">👤</span><span
-                    class="nav-btn-label">Profile</span></button>
-        </div>
+      </div>
     </div>
+  </div>
 
-    <!-- Edit Profile Modal -->
-    <div class="modal" id="editProfileModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Edit Profile</h2>
-                <button class="close-btn" id="closeEditProfile">✕</button>
-            </div>
-            <div id="editProfileAlert"></div>
-            <div class="form-group">
-                <label class="form-label">Full Name</label>
-                <input type="text" class="form-input" id="editName" placeholder="Enter your name">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-input" id="editEmail" placeholder="Enter your email" disabled>
-            </div>
-            <button class="btn btn-primary" id="saveProfileBtn"><span>💾</span><span>Save Changes</span></button>
+  <!-- STATS PAGE -->
+  <div class="page" id="statsPage"></div>
+
+  <!-- CALENDAR PAGE -->
+  <div class="page" id="calendarPage"></div>
+
+  <!-- CATEGORIES PAGE -->
+  <div class="page" id="categoriesPage"></div>
+
+  <!-- SETTINGS PAGE -->
+  <div class="page" id="settingsPage"></div>
+
+  <!-- PROFILE PAGE -->
+  <div class="page" id="profilePage">
+    <div class="profile-pg">
+      <div class="profile-hdr">
+        <div class="profile-av-lg" id="profileAvatar" onclick="openEditProfile()">U</div>
+        <h2 id="profileName">User Name</h2>
+        <p style="opacity:.8;font-size:.85rem" id="profileEmail">user@email.com</p>
+        <button class="ep-btn" onclick="openEditProfile()">Edit Profile</button>
+      </div>
+      <div class="psec">
+        <h3>
+          <svg width="16" height="16"><use href="#ic-bar-chart"/></svg> Your Activity
+        </h3>
+        <div class="pitem"><span>Total Tasks</span><strong id="profileTotalTasks">0</strong></div>
+        <div class="pitem"><span>Completed</span><strong id="profileCompletedTasks">0</strong></div>
+        <div class="pitem"><span>Completion Rate</span><strong id="profileCompletionRate">0%</strong></div>
+        <div class="pitem"><span>Member Since</span><strong id="profileMemberSince">Today</strong></div>
+      </div>
+      <div class="psec">
+        <h3>Achievements</h3>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem">
+          <div style="text-align:center;padding:.875rem;background:var(--raised);border-radius:12px;border:1px solid var(--line2)">
+            <div style="font-size:1.6rem;margin-bottom:.4rem">🌟</div>
+            <div style="font-size:.72rem;color:var(--t2)">First Task</div>
+          </div>
+          <div style="text-align:center;padding:.875rem;background:var(--raised);border-radius:12px;border:1px solid var(--line2)">
+            <div style="font-size:1.6rem;margin-bottom:.4rem">🔥</div>
+            <div style="font-size:.72rem;color:var(--t2)">10 Tasks</div>
+          </div>
+          <div style="text-align:center;padding:.875rem;background:var(--raised);border-radius:12px;border:1px solid var(--line2)">
+            <div style="font-size:1.6rem;margin-bottom:.4rem">💪</div>
+            <div style="font-size:.72rem;color:var(--t2)">Productive</div>
+          </div>
         </div>
+      </div>
     </div>
+  </div>
 
-    <!-- Task Modal (same as before) -->
-    <div class="modal" id="taskModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title" id="modalTitle">Add Task</h2>
-                <button class="close-btn" id="closeModal">✕</button>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Task Title</label>
-                <input type="text" class="form-input" id="taskTitle" placeholder="What needs to be done?">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Category</label>
-                <select class="form-input" id="taskCategory">
-                    <option value="Personal">📱 Personal</option>
-                    <option value="Work">💼 Work</option>
-                    <option value="Shopping">🛒 Shopping</option>
-                    <option value="Study">📚 Study</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Priority</label>
-                <select class="form-input" id="taskPriority">
-                    <option value="low">🟢 Low</option>
-                    <option value="medium">🟡 Medium</option>
-                    <option value="high">🔴 High</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Due Date</label>
-                <input type="datetime-local" class="form-input" id="taskDueDate">
-            </div>
-            <button class="btn btn-primary" id="saveTaskBtn"><span>💾</span><span>Save Task</span></button>
+  <!-- Bottom Nav -->
+  <div class="bnav">
+    <button class="bnav-btn active" data-page="homePage">
+      <span class="bnav-ico"><svg width="22" height="22"><use href="#ic-home"/></svg></span>
+      <span class="bnav-lbl">Home</span>
+    </button>
+    <button class="bnav-btn" data-page="statsPage">
+      <span class="bnav-ico"><svg width="22" height="22"><use href="#ic-bar-chart"/></svg></span>
+      <span class="bnav-lbl">Stats</span>
+    </button>
+    <button class="bnav-btn" data-page="calendarPage">
+      <span class="bnav-ico"><svg width="22" height="22"><use href="#ic-calendar"/></svg></span>
+      <span class="bnav-lbl">Calendar</span>
+    </button>
+    <button class="bnav-btn" data-page="profilePage">
+      <span class="bnav-ico"><svg width="22" height="22"><use href="#ic-user"/></svg></span>
+      <span class="bnav-lbl">Profile</span>
+    </button>
+  </div>
+</div>
+
+<!-- EDIT PROFILE MODAL -->
+<div class="modal" id="editProfileModal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <h2 class="modal-title">Edit Profile</h2>
+      <button class="close-btn" id="closeEditProfile">✕</button>
+    </div>
+    <div id="editProfileAlert"></div>
+
+    <!-- Photo Upload -->
+    <div class="av-upload-wrap">
+      <div class="av-upload-ring" onclick="document.getElementById('photoFileInput').click()">
+        <div class="av-upload-preview" id="editAvatarPreview">U</div>
+        <div class="av-cam-overlay">
+          <svg width="22" height="22" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
         </div>
+      </div>
+      <span class="av-upload-hint">Tap photo to change</span>
+      <button class="av-remove-btn hidden" id="removePhotoBtn" onclick="removePhoto()">Remove photo</button>
     </div>
+    <input type="file" id="photoFileInput" accept="image/*" style="display:none">
 
-    <!-- Search Modal -->
-    <div class="search-modal" id="searchModal">
-        <div class="search-container">
-            <input type="text" class="search-input" id="searchInput" placeholder="🔍 Search tasks..." autofocus>
-        </div>
-        <div class="search-results" id="searchResults"></div>
+    <div class="fg"><label class="lbl">Full Name</label><input type="text" class="inp" id="editName" placeholder="Your name"></div>
+    <div class="fg"><label class="lbl">Email</label><input type="email" class="inp" id="editEmail" disabled></div>
+    <button class="btn btn-primary" id="saveProfileBtn">Save Changes</button>
+  </div>
+</div>
+
+<!-- TASK MODAL -->
+<div class="modal" id="taskModal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <h2 class="modal-title" id="modalTitle">Add Task</h2>
+      <button class="close-btn" id="closeModal">✕</button>
     </div>
+    <div id="taskModalAlert"></div>
+    <div class="fg"><label class="lbl">Task Title *</label><input type="text" class="inp" id="taskTitle" placeholder="What needs to be done?"></div>
+    <div class="fg">
+      <label class="lbl">Category</label>
+      <select class="inp" id="taskCategory">
+        <option value="Personal">Personal</option>
+        <option value="Work">Work</option>
+        <option value="Shopping">Shopping</option>
+        <option value="Study">Study</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="lbl">Priority</label>
+      <select class="inp" id="taskPriority">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+    <div class="fg"><label class="lbl">Due Date *</label><input type="datetime-local" class="inp" id="taskDueDate"></div>
+    <button class="btn btn-primary" id="saveTaskBtn">Save Task</button>
+  </div>
+</div>
 
-<!-- ✅ Firebase Modular SDK -->
-<!-- ✅ Firebase Modular SDK -->
-<!-- Firebase v8 Compatible (for GitHub Pages) -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-<script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+<!-- SEARCH MODAL -->
+<div class="search-modal" id="searchModal">
+  <div class="search-wrap">
+    <input type="text" class="search-inp" id="searchInput" placeholder="Search tasks...">
+  </div>
+  <div class="search-res" id="searchResults"></div>
+</div>
 
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyCvjEmE28vCa4fjirnGwVKwZQgtDijxbwU",
-    authDomain: "task-master-2004.firebaseapp.com",
-    projectId: "task-master-2004",
-    storageBucket: "task-master-2004.firebasestorage.app",
-    messagingSenderId: "959840202961",
-    appId: "1:959840202961:web:eb73413f4b75175e51d5f0",
-    measurementId: "G-C0DJS166K8"
-  };
+<script type="module" src="script.js">
 
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-
-  // Make it global
-  window.db = db;
-
-  // EmailJS init
-  (function() {
-    emailjs.init("7aVCMvL70Vi2PxesE");
-  })();
 </script>
-<script src="script.js"></script>
 </body>
 </html>
