@@ -391,7 +391,7 @@
 </div>
 
 <script type="module">
-  import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,sendPasswordResetEmail,onAuthStateChanged,updateProfile as fbUpdateProfile,GoogleAuthProvider,signInWithPopup}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,sendPasswordResetEmail,onAuthStateChanged,updateProfile as fbUpdateProfile,GoogleAuthProvider,signInWithPopup}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import{getFirestore,doc,setDoc,getDoc,addDoc,updateDoc,deleteDoc,collection,query,where,getDocs,onSnapshot,serverTimestamp,orderBy}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig={apiKey:"AIzaSyCvjEmE28vCa4fjirnGwVKwZQgtDijxbwU",authDomain:"task-master-2004.firebaseapp.com",projectId:"task-master-2004",storageBucket:"task-master-2004.firebasestorage.app",messagingSenderId:"959840202961",appId:"1:959840202961:web:eb73413f4b75175e51d5f0"};
@@ -421,7 +421,7 @@ function setupPWA(){
   // Register service worker
   if('serviceWorker' in navigator){
     window.addEventListener('load',()=>{
-      navigator.serviceWorker.register('./sw.js').then(reg=>{
+      navigator.serviceWorker.register('sw.js').then(reg=>{
         console.log('SW registered',reg.scope);
         // Listen for SW messages
         navigator.serviceWorker.addEventListener('message',e=>{
@@ -1449,6 +1449,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     }
   });
 });
+
 </script>
 </body>
 </html>
