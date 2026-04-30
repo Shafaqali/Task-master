@@ -1,3 +1,8 @@
+
+
+
+
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,sendPasswordResetEmail,onAuthStateChanged,updateProfile as fbUpdateProfile,GoogleAuthProvider,signInWithPopup}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import{getFirestore,doc,setDoc,getDoc,addDoc,updateDoc,deleteDoc,collection,query,where,getDocs,onSnapshot,serverTimestamp,orderBy}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -28,7 +33,7 @@ function setupPWA(){
   // Register service worker
   if('serviceWorker' in navigator){
     window.addEventListener('load',()=>{
-      navigator.serviceWorker.register('./sw.js').then(reg=>{
+      navigator.serviceWorker.register('sw.js').then(reg=>{
         console.log('SW registered',reg.scope);
         // Listen for SW messages
         navigator.serviceWorker.addEventListener('message',e=>{
@@ -113,21 +118,7 @@ function todayKey(){
 }
 
 function dayKey(date){
-  // Always use LOCAL date parts — works correctly for IST and any timezone
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-}
-
-// Safe date parser: handles Firestore Timestamps, ISO strings, and date-only strings
-function parseTaskDate(dueDate){
-  if(!dueDate) return null;
-  if(typeof dueDate === 'object' && dueDate.toDate) return dueDate.toDate(); // Firestore Timestamp
-  if(typeof dueDate === 'object' && dueDate.seconds) return new Date(dueDate.seconds * 1000);
-  // Date-only string "2024-01-15" parses as UTC midnight — shift to local end-of-day
-  if(typeof dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)){
-    const [y, m, d] = dueDate.split('-').map(Number);
-    return new Date(y, m-1, d, 23, 59, 0); // local end-of-day
-  }
-  return new Date(dueDate);
 }
 
 function prevDayKey(dateStr){
@@ -154,18 +145,15 @@ function evaluateStreak(){
     }
   }
 
-  // All tasks due today — use parseTaskDate to handle Firestore Timestamps & date-only strings
+  // All tasks due today (compare date portion only, using local date)
   const todayTasks = S.tasks.filter(t => {
     if(!t.dueDate) return false;
-    const due = parseTaskDate(t.dueDate);
-    return due && dayKey(due) === today;
+    const due = new Date(t.dueDate);
+    return dayKey(due) === today;
   });
 
   // Tasks whose deadline has already passed
-  const expiredTasks = todayTasks.filter(t => {
-    const due = parseTaskDate(t.dueDate);
-    return due && due <= now;
-  });
+  const expiredTasks = todayTasks.filter(t => new Date(t.dueDate) <= now);
 
   // Has any expired task that is NOT completed → BREAK
   const hasFailedTask = expiredTasks.some(t => !t.completed);
@@ -243,10 +231,10 @@ function renderStreakBanner(){
   const now=new Date();
 
   // Check state
-  const todayTasks=S.tasks.filter(t=>{if(!t.dueDate)return false;const d=parseTaskDate(t.dueDate);return d&&dayKey(d)===today;});
-  const expiredTasks=todayTasks.filter(t=>{const d=parseTaskDate(t.dueDate);return d&&d<=now;});
+  const todayTasks=S.tasks.filter(t=>dayKey(new Date(t.dueDate))===today);
+  const expiredTasks=todayTasks.filter(t=>new Date(t.dueDate)<=now);
   const isBroken=brokenAt===today;
-  const hasUpcoming=todayTasks.some(t=>{const d=parseTaskDate(t.dueDate);return d&&d>now&&!t.completed;});
+  const hasUpcoming=todayTasks.some(t=>new Date(t.dueDate)>now&&!t.completed);
   const isAtRisk=!isBroken && expiredTasks.length===0 && todayTasks.length>0 && hasUpcoming && current>0;
 
   // Counts
