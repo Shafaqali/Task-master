@@ -1,3 +1,7 @@
+
+
+
+
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,sendPasswordResetEmail,onAuthStateChanged,updateProfile as fbUpdateProfile,GoogleAuthProvider,signInWithPopup}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import{getFirestore,doc,setDoc,getDoc,addDoc,updateDoc,deleteDoc,collection,query,where,getDocs,onSnapshot,serverTimestamp,orderBy}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -8,25 +12,315 @@ const auth=getAuth(app);
 const db=getFirestore(app);
 const gp=new GoogleAuthProvider();
 
-const S={user:null,tasks:[],categories:['Personal','Work','Shopping','Study'],filter:'all',sort:'date',editingId:null,calMonth:new Date().getMonth(),calYear:new Date().getFullYear(),unsubTasks:null};
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+const S={
+  user:null,tasks:[],
+  categories:['Personal','Work','Shopping','Study'],
+  filter:'all',sort:'date',editingId:null,
+  calMonth:new Date().getMonth(),calYear:new Date().getFullYear(),
+  unsubTasks:null,
+  streak:{current:0,best:0,lastDate:null,history:[],brokenAt:null}
+};
 
-document.addEventListener('DOMContentLoaded',()=>{
-  setupTheme();
-  setupEvents();
-  onAuthStateChanged(auth,async(fu)=>{
-    if(fu){
-      S.user=await loadProfile(fu);
-      subscribeToTasks(fu.uid);
-      showApp();
-    }else{
-      if(S.unsubTasks){S.unsubTasks();S.unsubTasks=null;}
-      S.user=null;S.tasks=[];
-      document.getElementById('appContainer').classList.remove('active');
-      showScreen('loginScreen');
+// ══════════════════════════════════════════
+//  PWA
+// ══════════════════════════════════════════
+let deferredPrompt=null;
+
+function setupPWA(){
+  // Register service worker
+  if('serviceWorker' in navigator){
+    window.addEventListener('load',()=>{
+      navigator.serviceWorker.register('sw.js').then(reg=>{
+        console.log('SW registered',reg.scope);
+        // Listen for SW messages
+        navigator.serviceWorker.addEventListener('message',e=>{
+          if(e.data?.type==='CHECK_STREAK') evaluateStreak();
+        });
+      }).catch(err=>console.log('SW registration failed:',err));
+    });
+  }
+
+  // Install prompt
+  window.addEventListener('beforeinstallprompt',e=>{
+    e.preventDefault();
+    deferredPrompt=e;
+    // Show banner after 3 seconds if not dismissed before
+    const dismissed=localStorage.getItem('pwa_dismissed');
+    if(!dismissed){
+      setTimeout(()=>{ $('pwaBanner').classList.remove('hidden'); },3000);
     }
   });
-});
 
+  window.addEventListener('appinstalled',()=>{
+    $('pwaBanner').classList.add('hidden');
+    deferredPrompt=null;
+    showStreakToast('✅ App installed successfully!');
+  });
+
+  $('pwaInstallBtn').addEventListener('click',async()=>{
+    if(!deferredPrompt)return;
+    deferredPrompt.prompt();
+    const{outcome}=await deferredPrompt.userChoice;
+    deferredPrompt=null;
+    $('pwaBanner').classList.add('hidden');
+  });
+
+  $('pwaDismissBtn').addEventListener('click',()=>{
+    $('pwaBanner').classList.add('hidden');
+    localStorage.setItem('pwa_dismissed','1');
+  });
+
+  // Online / offline indicator
+  const toast=$('offlineToast');
+  function updateOnlineStatus(){
+    if(!navigator.onLine){
+      toast.classList.add('show');
+    }else{
+      toast.classList.remove('show');
+    }
+  }
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+  updateOnlineStatus();
+}
+
+// ══════════════════════════════════════════
+//  STREAK SYSTEM
+// ══════════════════════════════════════════
+
+const STREAK_KEY = uid => `tm_streak_${uid}`;
+
+function loadStreakData(){
+  if(!S.user) return;
+  const raw = localStorage.getItem(STREAK_KEY(S.user.uid));
+  if(raw){
+    try{ S.streak = JSON.parse(raw); }catch(e){ resetStreakData(); }
+  } else {
+    resetStreakData();
+  }
+}
+
+function saveStreakData(){
+  if(!S.user) return;
+  localStorage.setItem(STREAK_KEY(S.user.uid), JSON.stringify(S.streak));
+}
+
+function resetStreakData(){
+  S.streak = {current:0, best:0, lastDate:null, history:[], brokenAt:null};
+}
+
+function todayKey(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function dayKey(date){
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+function prevDayKey(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate()-1);
+  return dayKey(d);
+}
+
+// ── CORE STREAK LOGIC ──
+// Rule: If today has ANY task whose due time has PASSED and it's NOT completed → streak breaks
+// Streak builds: when today has at least one task AND ALL tasks whose due time passed are completed
+function evaluateStreak(){
+  const today = todayKey();
+  const now = new Date();
+
+  // Sanitize corrupted state: current > 0 but lastDate null/wrong gap
+  if(S.streak.current > 0 && S.streak.lastDate){
+    const yesterday = prevDayKey(today);
+    if(S.streak.lastDate !== today && S.streak.lastDate !== yesterday){
+      // Gap detected — streak should have been 0
+      S.streak.current = 0;
+      S.streak.lastDate = null;
+      saveStreakData();
+    }
+  }
+
+  // All tasks due today (compare date portion only, using local date)
+  const todayTasks = S.tasks.filter(t => {
+    if(!t.dueDate) return false;
+    const due = new Date(t.dueDate);
+    return dayKey(due) === today;
+  });
+
+  // Tasks whose deadline has already passed
+  const expiredTasks = todayTasks.filter(t => new Date(t.dueDate) <= now);
+
+  // Has any expired task that is NOT completed → BREAK
+  const hasFailedTask = expiredTasks.some(t => !t.completed);
+
+  // All expired tasks are completed (and at least one exists)
+  const allExpiredDone = expiredTasks.length > 0 && expiredTasks.every(t => t.completed);
+
+  const prevStreak = S.streak.current;
+
+  if(hasFailedTask){
+    // ── BREAK ──
+    if(S.streak.current > 0 || S.streak.brokenAt !== today){
+      const broken = S.streak.current;
+      S.streak.current = 0;
+      S.streak.brokenAt = today;
+      S.streak.lastDate = null;
+      // Remove today from history
+      S.streak.history = S.streak.history.filter(d => d !== today);
+      saveStreakData();
+      if(broken > 0) showStreakToast(`💔 Streak broken! You had ${broken} day${broken>1?'s':''}`);
+    }
+  } else if(allExpiredDone){
+    // ── BUILD / MAINTAIN ──
+    if(S.streak.lastDate !== today){
+      const yesterday = prevDayKey(today);
+      const isConsecutive = S.streak.lastDate === yesterday;
+      const isFreshStart = !S.streak.lastDate || S.streak.current === 0;
+
+      if(isConsecutive){
+        S.streak.current += 1;
+      } else if(isFreshStart){
+        S.streak.current = 1;
+      } else {
+        // Gap of more than 1 day → reset to 1
+        S.streak.current = 1;
+      }
+
+      S.streak.lastDate = today;
+      S.streak.brokenAt = null; // clear broken state
+      S.streak.best = Math.max(S.streak.best, S.streak.current);
+      if(!S.streak.history.includes(today)){
+        S.streak.history.push(today);
+        if(S.streak.history.length > 7) S.streak.history.shift();
+      }
+      saveStreakData();
+
+      // Milestone toasts
+      const cur = S.streak.current;
+      if(cur !== prevStreak){
+        if(cur === 3) showStreakToast('🔥 3-day streak! You\'re on a roll!');
+        else if(cur === 7) showStreakToast('🔥🔥 One week streak! Incredible!');
+        else if(cur === 14) showStreakToast('⚡ 14-day streak! Unstoppable!');
+        else if(cur === 30) showStreakToast('🏆 30-day streak! LEGENDARY!');
+        else if(cur === 1 && prevStreak === 0) showStreakToast('🔥 Streak started! Keep going!');
+      }
+    }
+  }
+  // else: no expired tasks yet today — no change to streak
+
+  renderStreakBanner();
+}
+
+function renderStreakBanner(){
+  const banner=$('streakBanner');
+  const fireEl=$('streakFireEmoji');
+  const countEl=$('streakCount');
+  const subEl=$('streakSub');
+  const weekEl=$('streakWeek');
+  const bestEl=$('streakBest');
+  const sbTxt=$('sbStreakTxt');
+  if(!banner) return;
+
+  const{current,best,history,brokenAt,lastDate}=S.streak;
+  const today=todayKey();
+  const now=new Date();
+
+  // Check state
+  const todayTasks=S.tasks.filter(t=>dayKey(new Date(t.dueDate))===today);
+  const expiredTasks=todayTasks.filter(t=>new Date(t.dueDate)<=now);
+  const isBroken=brokenAt===today;
+  const hasUpcoming=todayTasks.some(t=>new Date(t.dueDate)>now&&!t.completed);
+  const isAtRisk=!isBroken && expiredTasks.length===0 && todayTasks.length>0 && hasUpcoming && current>0;
+
+  // Counts
+  countEl.textContent=current;
+  sbTxt.textContent=`${current} day streak`;
+
+  // 7-day dots
+  weekEl.innerHTML='';
+  for(let i=6;i>=0;i--){
+    const d=new Date();d.setDate(d.getDate()-i);
+    const dk=dayKey(d);
+    const isT=dk===today;
+    const filled=history.includes(dk);
+    const dot=document.createElement('div');
+    if(filled){dot.className=`streak-dot ${isT?'today-done':'done'}`;}
+    else if(isT){dot.className='streak-dot today-empty';}
+    else{dot.className='streak-dot';}
+    dot.title=dk;
+    weekEl.appendChild(dot);
+  }
+  const lbl=document.createElement('span');
+  lbl.className='streak-week-lbl';lbl.textContent='7d';
+  weekEl.appendChild(lbl);
+
+  // Best badge
+  if(best>0){
+    bestEl.textContent=`🏆 Best: ${best} day${best>1?'s':''}`;
+    bestEl.classList.remove('hidden');
+  } else {
+    bestEl.classList.add('hidden');
+  }
+
+  // State classes
+  banner.classList.remove('state-zero','state-broken','state-risk');
+
+  if(isBroken){
+    banner.classList.add('state-broken');
+    fireEl.textContent='💔';
+    subEl.textContent=`Streak broken — a task expired incomplete. Start fresh tomorrow!`;
+  } else if(isAtRisk){
+    banner.classList.add('state-risk');
+    fireEl.textContent='⚠️';
+    subEl.textContent=`Tasks due today! Complete before deadline or streak breaks!`;
+  } else if(current===0){
+    banner.classList.add('state-zero');
+    fireEl.textContent='🔥';
+    subEl.textContent=todayTasks.length>0
+      ? `Complete today's tasks before they expire to start!`
+      : `Add a task for today and complete it to start your streak!`;
+  } else {
+    fireEl.textContent=current>=14?'🔥🔥🔥':current>=7?'🔥🔥':'🔥';
+    subEl.textContent=lastDate===today
+      ? `Amazing! ${current} day${current>1?'s':''} strong — keep it up!`
+      : hasUpcoming
+        ? `Don't forget to complete today's tasks!`
+        : `Great work so far!`;
+  }
+
+  // Update profile page streak if visible
+  updateProfileStreakCard();
+}
+
+function updateProfileStreakCard(){
+  const numEl=$('profileStreakNum');
+  const bestEl=$('profileStreakBest');
+  if(numEl) numEl.textContent=S.streak.current;
+  if(bestEl) bestEl.textContent=`🏆 Best: ${S.streak.best} day${S.streak.best!==1?'s':''}`;
+}
+
+function showStreakToast(msg){
+  const t=$('streakToast');
+  $('streakToastMsg').textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+// Poll every minute to check if any task has expired
+let streakPollTimer=null;
+function startStreakPoller(){
+  if(streakPollTimer) clearInterval(streakPollTimer);
+  streakPollTimer=setInterval(()=>{ evaluateStreak(); }, 60000);
+}
+
+// ══════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════
 const $=id=>document.getElementById(id);
 function showLoading(){$('loading').classList.add('active')}
 function hideLoading(){$('loading').classList.remove('active')}
@@ -48,7 +342,9 @@ function fmtDate(ds){
   const nO=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const diff=Math.round((dO-nO)/86400000);
   if(diff<0)return'Overdue';
-  if(diff===0)return'Today';
+  if(diff===0){
+    return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  }
   if(diff===1)return'Tomorrow';
   return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
@@ -57,6 +353,9 @@ function friendlyErr(code){
   return({'auth/user-not-found':'No account with this email.','auth/wrong-password':'Wrong password.','auth/invalid-credential':'Invalid email or password.','auth/email-already-in-use':'Email already registered.','auth/weak-password':'Password min 6 characters.','auth/invalid-email':'Invalid email address.','auth/too-many-requests':'Too many attempts. Try later.','auth/popup-closed-by-user':'Google sign-in cancelled.','auth/network-request-failed':'Network error.'})[code]||code;
 }
 
+// ══════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════
 async function handleLogin(){
   const email=$('loginEmail').value.trim(),pass=$('loginPassword').value;
   if(!email||!pass){showAlert('loginAlert','Please fill all fields');return;}
@@ -91,14 +390,13 @@ async function handleForgotPassword(){
   if(!email){showAlert('forgotAlert','Please enter your email');return;}
   showLoading();
   try{
-    await sendPasswordResetEmail(auth,email);
-    hideLoading();
+    await sendPasswordResetEmail(auth,email);hideLoading();
     showAlert('forgotAlert',`Reset email sent to <strong>${email}</strong>!`,'success');
     setTimeout(()=>showScreen('loginScreen'),3000);
   }catch(e){hideLoading();showAlert('forgotAlert',friendlyErr(e.code));}
 }
 
-async function handleLogout(){if(!confirm('Logout?'))return;await signOut(auth);}
+async function handleLogout(){if(!confirm('Logout?'))return;if(streakPollTimer)clearInterval(streakPollTimer);await signOut(auth);}
 
 async function loadProfile(fu){
   const snap=await getDoc(doc(db,'users',fu.uid));
@@ -112,6 +410,7 @@ function subscribeToTasks(uid){
   S.unsubTasks=onSnapshot(q,(snap)=>{
     S.tasks=snap.docs.map(d=>({id:d.id,...d.data()}));
     renderTasks();updateStats();checkNotifications();
+    evaluateStreak(); // ← check streak on every task update
     const ap=document.querySelector('.page.active')?.id;
     if(ap==='statsPage')updateStatsPage();
     if(ap==='calendarPage')updateCalendar();
@@ -131,22 +430,37 @@ function showApp(){
   const greet=hr<12?'GOOD MORNING':hr<17?'GOOD AFTERNOON':'GOOD EVENING';
   $('greetingTime').textContent=greet;
   $('greetingName').innerHTML=`Hey, <span>${esc(name.split(' ')[0])}</span>`;
+  loadStreakData();
+  renderStreakBanner();
+  startStreakPoller();
   setupTheme();
 }
 
+// ══════════════════════════════════════════
+//  TASKS
+// ══════════════════════════════════════════
 async function saveTask(){
   const title=$('taskTitle').value.trim(),category=$('taskCategory').value,priority=$('taskPriority').value,dueDate=$('taskDueDate').value;
   if(!title||!dueDate){showAlert('taskModalAlert','Please fill all required fields');return;}
   showLoading();
   try{
-    if(S.editingId){await updateDoc(doc(db,'tasks',S.editingId),{title,category,priority,dueDate,updatedAt:serverTimestamp()});}
-    else{await addDoc(collection(db,'tasks'),{uid:S.user.uid,title,category,priority,dueDate,completed:false,createdAt:serverTimestamp()});}
+    if(S.editingId){
+      await updateDoc(doc(db,'tasks',S.editingId),{title,category,priority,dueDate,updatedAt:serverTimestamp()});
+    } else {
+      await addDoc(collection(db,'tasks'),{uid:S.user.uid,title,category,priority,dueDate,completed:false,createdAt:serverTimestamp()});
+    }
     closeTaskModal();
   }catch(e){showAlert('taskModalAlert','Error: '+e.message);}
   hideLoading();
 }
 
-window.toggleTask=async(id)=>{const t=S.tasks.find(t=>t.id===id);if(t)await updateDoc(doc(db,'tasks',id),{completed:!t.completed});};
+window.toggleTask=async(id)=>{
+  const t=S.tasks.find(t=>t.id===id);
+  if(!t)return;
+  await updateDoc(doc(db,'tasks',id),{completed:!t.completed});
+  // Streak evaluated via onSnapshot → evaluateStreak() call
+};
+
 window.editTask=(id)=>openTaskModal(id);
 window.deleteTask=async(id)=>{if(!confirm('Delete this task?'))return;await deleteDoc(doc(db,'tasks',id));};
 
@@ -181,8 +495,16 @@ function renderTasks(){
 }
 
 function taskCardHTML(t){
-  const isOverdue=!t.completed&&new Date(t.dueDate)<new Date();
+  const now=new Date();
+  const due=new Date(t.dueDate);
+  const isOverdue=!t.completed&&due<now;
+  const isStreakRisk=!t.completed&&dayKey(due)===todayKey()&&due>now; // due today, future, not done
   const dateLabel=fmtDate(t.dueDate);
+
+  const riskTag=isStreakRisk
+    ?`<span class="streak-risk-tag">⚠️ Streak at risk</span>`
+    :'';
+
   return`<div class="task-card priority-${t.priority}">
     <div class="task-hdr">
       <input type="checkbox" class="task-cb" ${t.completed?'checked':''} onchange="toggleTask('${t.id}')">
@@ -194,16 +516,13 @@ function taskCardHTML(t){
           <span style="${isOverdue?'color:var(--rose)':''}">
             <svg width="11" height="11" style="vertical-align:middle;margin-right:2px"><use href="#ic-clock"/></svg>${dateLabel}
           </span>
+          ${riskTag}
         </div>
       </div>
     </div>
     <div class="task-actions">
-      <button class="t-btn t-btn-edit" onclick="editTask('${t.id}')">
-        <svg width="12" height="12"><use href="#ic-edit"/></svg> Edit
-      </button>
-      <button class="t-btn t-btn-del" onclick="deleteTask('${t.id}')">
-        <svg width="12" height="12"><use href="#ic-trash"/></svg> Delete
-      </button>
+      <button class="t-btn t-btn-edit" onclick="editTask('${t.id}')"><svg width="12" height="12"><use href="#ic-edit"/></svg> Edit</button>
+      <button class="t-btn t-btn-del" onclick="deleteTask('${t.id}')"><svg width="12" height="12"><use href="#ic-trash"/></svg> Delete</button>
     </div>
   </div>`;
 }
@@ -228,6 +547,9 @@ function checkNotifications(){
     </div>`}).join('');
 }
 
+// ══════════════════════════════════════════
+//  SEARCH
+// ══════════════════════════════════════════
 function openSearch(){$('searchModal').classList.add('active');$('searchInput').focus();}
 function closeSearch(){$('searchModal').classList.remove('active');$('searchInput').value='';$('searchResults').innerHTML='';}
 window.closeSearch=closeSearch;
@@ -244,18 +566,24 @@ function handleSearch(e){
     </div></div></div>`).join('');
 }
 
+// ══════════════════════════════════════════
+//  PROFILE
+// ══════════════════════════════════════════
 function updateProfilePage(){
   const total=S.tasks.length,done=S.tasks.filter(t=>t.completed).length,rate=total>0?Math.round((done/total)*100):0;
   $('profileTotalTasks').textContent=total;$('profileCompletedTasks').textContent=done;
   $('profileCompletionRate').textContent=rate+'%';
   const d=new Date(S.user.createdAt);
   $('profileMemberSince').textContent=isNaN(d)?'Recently':d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  updateProfileStreakCard();
 }
 
-// ── PHOTO UPLOAD STATE ──
-let pendingPhotoDataURL = null; // null = no change, '' = remove, 'data:...' = new photo
+// ══════════════════════════════════════════
+//  PHOTO UPLOAD
+// ══════════════════════════════════════════
+let pendingPhotoDataURL=null;
 
-function compressImage(file, maxPx=200, quality=0.82){
+function compressImage(file,maxPx=200,quality=0.82){
   return new Promise((resolve,reject)=>{
     const reader=new FileReader();
     reader.onload=e=>{
@@ -266,73 +594,38 @@ function compressImage(file, maxPx=200, quality=0.82){
         if(w>h){if(w>maxPx){h=Math.round(h*maxPx/w);w=maxPx;}}
         else{if(h>maxPx){w=Math.round(w*maxPx/h);h=maxPx;}}
         canvas.width=w;canvas.height=h;
-        const ctx=canvas.getContext('2d');
-        ctx.drawImage(img,0,0,w,h);
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
         resolve(canvas.toDataURL('image/jpeg',quality));
       };
-      img.onerror=reject;
-      img.src=e.target.result;
+      img.onerror=reject;img.src=e.target.result;
     };
-    reader.onerror=reject;
-    reader.readAsDataURL(file);
+    reader.onerror=reject;reader.readAsDataURL(file);
   });
 }
 
-function syncAllAvatars(photoURL, name){
+function syncAllAvatars(photoURL,name){
   const initials=name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
-  const setAv=(id)=>{
+  ['userAvatar','profileAvatar','editAvatarPreview'].forEach(id=>{
     const el=$(id);if(!el)return;
     if(photoURL){el.innerHTML=`<img src="${photoURL}" alt="${esc(name)}">`;}
     else{el.innerHTML='';el.textContent=initials;}
-  };
-  setAv('userAvatar');setAv('profileAvatar');setAv('editAvatarPreview');
+  });
 }
 
 window.openEditProfile=function(){
   pendingPhotoDataURL=null;
-  $('editName').value=S.user.name;
-  $('editEmail').value=S.user.email;
-  $('editProfileAlert').innerHTML='';
-
-  // Show current photo or initials in preview
+  $('editName').value=S.user.name;$('editEmail').value=S.user.email;$('editProfileAlert').innerHTML='';
   const prev=$('editAvatarPreview');
   const initials=S.user.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
-  if(S.user.photoURL){
-    prev.innerHTML=`<img src="${S.user.photoURL}" alt="avatar">`;
-    $('removePhotoBtn').classList.remove('hidden');
-  }else{
-    prev.innerHTML='';prev.textContent=initials;
-    $('removePhotoBtn').classList.add('hidden');
-  }
+  if(S.user.photoURL){prev.innerHTML=`<img src="${S.user.photoURL}" alt="avatar">`;$('removePhotoBtn').classList.remove('hidden');}
+  else{prev.innerHTML='';prev.textContent=initials;$('removePhotoBtn').classList.add('hidden');}
   $('editProfileModal').classList.add('active');
 };
 
-// File input handler — called from setupEvents
-function setupPhotoInput(){
-  const fileInp=document.getElementById('photoFileInput');
-  if(fileInp){
-    fileInp.addEventListener('change',async(e)=>{
-      const file=e.target.files[0];
-      if(!file)return;
-      if(file.size>8*1024*1024){showAlert('editProfileAlert','Image too large. Max 8MB.');return;}
-      try{
-        const dataURL=await compressImage(file);
-        pendingPhotoDataURL=dataURL;
-        const prev=$('editAvatarPreview');
-        prev.innerHTML=`<img src="${dataURL}" alt="preview">`;
-        $('removePhotoBtn').classList.remove('hidden');
-      }catch(err){showAlert('editProfileAlert','Could not read image.');}
-      fileInp.value='';
-    });
-  }
-}
-
 window.removePhoto=function(){
-  pendingPhotoDataURL=''; // empty string = remove
+  pendingPhotoDataURL='';
   const initials=($('editName').value.trim()||S.user.name).split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
-  const prev=$('editAvatarPreview');
-  prev.innerHTML='';prev.textContent=initials;
-  $('removePhotoBtn').classList.add('hidden');
+  const prev=$('editAvatarPreview');prev.innerHTML='';prev.textContent=initials;$('removePhotoBtn').classList.add('hidden');
 };
 
 function closeEditProfile(){$('editProfileModal').classList.remove('active');pendingPhotoDataURL=null;}
@@ -342,36 +635,25 @@ async function saveProfile(){
   if(!newName){showAlert('editProfileAlert','Name cannot be empty');return;}
   showLoading();
   try{
-    const u=auth.currentUser;
-    let newPhotoURL=S.user.photoURL;
-
-    if(pendingPhotoDataURL===''){ // remove photo
-      newPhotoURL=null;
-    }else if(pendingPhotoDataURL){ // new photo (base64)
-      newPhotoURL=pendingPhotoDataURL;
-    }
-
-    // Firebase Auth only accepts http URLs for photoURL — base64 stored in Firestore only
+    const u=auth.currentUser;let newPhotoURL=S.user.photoURL;
+    if(pendingPhotoDataURL===''){newPhotoURL=null;}
+    else if(pendingPhotoDataURL){newPhotoURL=pendingPhotoDataURL;}
     const authPhotoURL=(newPhotoURL&&newPhotoURL.startsWith('http'))?newPhotoURL:null;
     await fbUpdateProfile(u,{displayName:newName,photoURL:authPhotoURL});
     await updateDoc(doc(db,'users',u.uid),{name:newName,photoURL:newPhotoURL||null});
-
-    S.user.name=newName;
-    S.user.photoURL=newPhotoURL||null;
-    pendingPhotoDataURL=null;
-
+    S.user.name=newName;S.user.photoURL=newPhotoURL||null;pendingPhotoDataURL=null;
     syncAllAvatars(S.user.photoURL,newName);
-    $('userName').textContent=newName;
-    $('profileName').textContent=newName;
-
+    $('userName').textContent=newName;$('profileName').textContent=newName;
     showAlert('editProfileAlert','Profile updated!','success');
     setTimeout(closeEditProfile,1500);
   }catch(e){showAlert('editProfileAlert',e.message);}
   hideLoading();
 }
 
+// ══════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════
 function toggleSidebar(){$('sidebar').classList.toggle('active');$('sidebarOverlay').classList.toggle('active');}
-
 const pageTitles={homePage:'Tasks',statsPage:'Statistics',calendarPage:'Calendar',categoriesPage:'Categories',settingsPage:'Settings',profilePage:'Profile'};
 
 function goTo(pageId){
@@ -387,12 +669,26 @@ function goTo(pageId){
   if(pageId==='settingsPage')updateSettings();
 }
 
+// ══════════════════════════════════════════
+//  STATS PAGE
+// ══════════════════════════════════════════
 function updateStatsPage(){
   const total=S.tasks.length,done=S.tasks.filter(t=>t.completed).length,pending=total-done;
   const rate=total>0?Math.round((done/total)*100):0;
   const catStats=S.categories.map(cat=>{const ct=S.tasks.filter(t=>t.category===cat);return{name:cat,count:ct.length,done:ct.filter(t=>t.completed).length};});
   const pri={high:S.tasks.filter(t=>t.priority==='high').length,medium:S.tasks.filter(t=>t.priority==='medium').length,low:S.tasks.filter(t=>t.priority==='low').length};
+  const{current,best}=S.streak;
   $('statsPage').innerHTML=`<div class="pg">
+    <div class="sec-card" style="background:linear-gradient(135deg,#ff6b35,#f7931e);border:none">
+      <div style="display:flex;align-items:center;gap:1rem">
+        <div style="font-size:2.5rem">${current>=7?'🔥🔥':'🔥'}</div>
+        <div>
+          <div style="font-size:1.8rem;font-weight:900;color:white;line-height:1">${current} <span style="font-size:.85rem;opacity:.9">days</span></div>
+          <div style="font-size:.72rem;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.08em;font-weight:700">Current Streak</div>
+          <div style="font-size:.78rem;color:rgba(255,255,255,.9);margin-top:.3rem">🏆 Best: ${best} day${best!==1?'s':''}</div>
+        </div>
+      </div>
+    </div>
     <div class="sec-card">
       <h3 class="sec-card-title"><svg width="16" height="16"><use href="#ic-bar-chart"/></svg> Overall Progress</h3>
       <div style="text-align:center;padding:1.5rem 0">
@@ -434,6 +730,9 @@ function updateStatsPage(){
   </div>`;
 }
 
+// ══════════════════════════════════════════
+//  CALENDAR
+// ══════════════════════════════════════════
 function updateCalendar(){
   const{calMonth:cm,calYear:cy}=S;
   const firstDay=new Date(cy,cm,1).getDay(),daysInMonth=new Date(cy,cm+1,0).getDate();
@@ -505,6 +804,9 @@ window.showDayTasks=(y,m,d)=>{
   $('calDayTasks').innerHTML=renderDayTasks(tasks);
 };
 
+// ══════════════════════════════════════════
+//  CATEGORIES
+// ══════════════════════════════════════════
 function updateCategories(){
   const icons={Personal:'📱',Work:'💼',Shopping:'🛒',Study:'📚'};
   const data=S.categories.map(cat=>{const ct=S.tasks.filter(t=>t.category===cat);return{name:cat,icon:icons[cat]||'📁',total:ct.length,done:ct.filter(t=>t.completed).length};});
@@ -535,6 +837,9 @@ window.filterByCategory=(cat)=>{
   },100);
 };
 
+// ══════════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════════
 function updateSettings(){
   const cfg=JSON.parse(localStorage.getItem('tm_settings')||'{}');
   const theme=cfg.theme||'dark',notifs=cfg.notifications!==false,sound=cfg.sound!==false;
@@ -555,6 +860,15 @@ function updateSettings(){
       <div class="stg-item" onclick="toggleSetting('sound')">
         <div><div class="stg-lbl">Sound Effects</div><div class="stg-sub">Action sounds</div></div>
         <div class="toggle ${sound?'on':''}" id="soundToggle"><div class="toggle-dot"></div></div>
+      </div>
+    </div>
+    <div class="stg-grp">
+      <h3>🔥 Streak</h3>
+      <div class="pitem"><span>Current Streak</span><strong>${S.streak.current} day${S.streak.current!==1?'s':''}</strong></div>
+      <div class="pitem"><span>Best Streak</span><strong>${S.streak.best} day${S.streak.best!==1?'s':''}</strong></div>
+      <div class="stg-item" onclick="resetStreak()">
+        <div><div class="stg-lbl" style="color:var(--rose)">Reset Streak</div><div class="stg-sub">Clear streak data</div></div>
+        <svg width="16" height="16" style="color:var(--rose)"><use href="#ic-trash"/></svg>
       </div>
     </div>
     <div class="stg-grp">
@@ -581,7 +895,7 @@ function updateSettings(){
     </div>
     <div class="stg-grp">
       <h3>About</h3>
-      <div class="pitem"><span>Version</span><strong>2.0.0</strong></div>
+      <div class="pitem"><span>Version</span><strong>2.1.0 PWA</strong></div>
       <div class="pitem"><span>Backend</span><strong>Firebase</strong></div>
       <div class="pitem"><span>User ID</span><strong style="font-family:'JetBrains Mono',monospace;font-size:.7rem">${S.user?.uid?.slice(0,12)}…</strong></div>
     </div>
@@ -598,6 +912,10 @@ window.toggleTheme=()=>{
 window.toggleSetting=(k)=>{
   const cfg=JSON.parse(localStorage.getItem('tm_settings')||'{}');
   cfg[k]=!cfg[k];localStorage.setItem('tm_settings',JSON.stringify(cfg));updateSettings();
+};
+window.resetStreak=()=>{
+  if(!confirm('Reset your streak data?'))return;
+  resetStreakData();saveStreakData();renderStreakBanner();updateSettings();
 };
 window.handleChangePwd=async()=>{
   if(!confirm('Send password reset email to '+S.user.email+'?'))return;
@@ -624,8 +942,28 @@ window.clearAllData=async()=>{
 
 function setupTheme(){const cfg=JSON.parse(localStorage.getItem('tm_settings')||'{}');document.body.setAttribute('data-theme',cfg.theme||'dark');}
 
+// ══════════════════════════════════════════
+//  EVENTS
+// ══════════════════════════════════════════
 function setupEvents(){
-  setupPhotoInput();
+  // Photo input
+  const fileInp=$('photoFileInput');
+  if(fileInp){
+    fileInp.addEventListener('change',async(e)=>{
+      const file=e.target.files[0];if(!file)return;
+      if(file.size>8*1024*1024){showAlert('editProfileAlert','Image too large. Max 8MB.');return;}
+      try{
+        const dataURL=await compressImage(file);
+        pendingPhotoDataURL=dataURL;
+        const prev=$('editAvatarPreview');
+        prev.innerHTML=`<img src="${dataURL}" alt="preview">`;
+        $('removePhotoBtn').classList.remove('hidden');
+      }catch(err){showAlert('editProfileAlert','Could not read image.');}
+      fileInp.value='';
+    });
+  }
+
+  // Auth
   $('loginBtn').addEventListener('click',handleLogin);
   $('loginEmail').addEventListener('keydown',e=>e.key==='Enter'&&handleLogin());
   $('loginPassword').addEventListener('keydown',e=>e.key==='Enter'&&handleLogin());
@@ -640,26 +978,70 @@ function setupEvents(){
   $('showLogin2').addEventListener('click',e=>{e.preventDefault();showScreen('loginScreen');});
   $('showForgotPassword').addEventListener('click',e=>{e.preventDefault();showScreen('forgotPasswordScreen');});
   $('backToLogin').addEventListener('click',e=>{e.preventDefault();showScreen('loginScreen');});
+
+  // App nav
   $('menuBtn').addEventListener('click',toggleSidebar);
   $('sidebarOverlay').addEventListener('click',toggleSidebar);
   document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>goTo(el.dataset.page)));
   document.querySelectorAll('.bnav-btn').forEach(el=>el.addEventListener('click',()=>goTo(el.dataset.page)));
+
+  // Tasks
   $('addTaskBtn').addEventListener('click',()=>openTaskModal());
   $('saveTaskBtn').addEventListener('click',saveTask);
   $('closeModal').addEventListener('click',closeTaskModal);
   $('taskModal').addEventListener('click',e=>{if(e.target.id==='taskModal')closeTaskModal();});
+
+  // Notif
   $('notifBtn').addEventListener('click',()=>$('notifPanel').classList.toggle('active'));
   $('closeNotifPanel').addEventListener('click',()=>$('notifPanel').classList.remove('active'));
+
+  // Search
   $('searchBtn').addEventListener('click',openSearch);
   $('searchInput').addEventListener('input',handleSearch);
   $('searchModal').addEventListener('click',e=>{if(e.target.id==='searchModal')closeSearch();});
+
+  // Filters
   document.querySelectorAll('.chip[data-filter]').forEach(c=>c.addEventListener('click',()=>{
     S.filter=c.dataset.filter;
     document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.toggle('active',x===c));
     renderTasks();
   }));
   $('sortSelect').addEventListener('change',e=>{S.sort=e.target.value;renderTasks();});
+
+  // Profile
   $('closeEditProfile').addEventListener('click',closeEditProfile);
   $('saveProfileBtn').addEventListener('click',saveProfile);
   $('editProfileModal').addEventListener('click',e=>{if(e.target.id==='editProfileModal')closeEditProfile();});
 }
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+document.addEventListener('DOMContentLoaded',()=>{
+  setupTheme();
+  setupPWA();
+  setupEvents();
+
+  // Handle streak check messages from Service Worker (background sync / midnight)
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.addEventListener('message', e => {
+      if(e.data?.type === 'CHECK_STREAK' && S.user){
+        evaluateStreak();
+      }
+    });
+  }
+  onAuthStateChanged(auth,async(fu)=>{
+    if(fu){
+      S.user=await loadProfile(fu);
+      subscribeToTasks(fu.uid);
+      showApp();
+    }else{
+      if(S.unsubTasks){S.unsubTasks();S.unsubTasks=null;}
+      if(streakPollTimer){clearInterval(streakPollTimer);streakPollTimer=null;}
+      S.user=null;S.tasks=[];
+      $('appContainer').classList.remove('active');
+      showScreen('loginScreen');
+    }
+  });
+});
+
