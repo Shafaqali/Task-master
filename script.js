@@ -442,7 +442,7 @@ function updateCalendar(){
   const today=new Date();
   let html=`<div class="pg">
     <div class="cal-nav">
-      <button class="ibtn" onclick="changeMonth(-1)"><svg width="16" height="16"><use href="#ic-chevron-right" style="transform:rotate(180deg)"/></svg></button>
+      <button class="ibtn" onclick="changeMonth(-1)"><svg width="16" height="16" style="transform:rotate(180deg)"><use href="#ic-chevron-right"/></svg></button>
       <h2>${months[cm]} ${cy}</h2>
       <button class="ibtn" onclick="changeMonth(1)"><svg width="16" height="16"><use href="#ic-chevron-right"/></svg></button>
     </div>
