@@ -1,0 +1,34 @@
+{
+  "name": "TaskMaster",
+  "short_name": "TaskMaster",
+  "description": "Organize your life, one task at a time",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0c14",
+  "theme_color": "#4f6ef7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%234f6ef7'/><path d='M60 70h72M60 96h72M60 122h48' stroke='white' stroke-width='10' stroke-linecap='round'/><rect x='52' y='52' width='88' height='104' rx='8' fill='none' stroke='white' stroke-width='8'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%234f6ef7'/><path d='M160 190h192M160 256h192M160 322h128' stroke='white' stroke-width='28' stroke-linecap='round'/><rect x='140' y='140' width='232' height='276' rx='20' fill='none' stroke='white' stroke-width='22'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Add Task",
+      "short_name": "Add",
+      "description": "Add a new task",
+      "url": "/?action=add",
+      "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%234f6ef7'/><path d='M48 24v48M24 48h48' stroke='white' stroke-width='8' stroke-linecap='round'/></svg>", "sizes": "96x96" }]
+    }
+  ]
+}
